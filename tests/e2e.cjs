@@ -87,9 +87,11 @@ async function waitForServer() {
     check(await g(() => document.getElementById('crosshair').className === 'in-range'), 'crosshair turns orange over a hookable block');
 
     await page.mouse.down({ button: 'left' });
-    await page.waitForTimeout(300);
+    await page.waitForTimeout(100);
+    check(await g(() => !!window.__skyhook.run.player.pending || !!window.__skyhook.run.player.hook), 'left click fires the hook (it flies to the block)');
+    for (let i = 0; i < 20 && !(await g(() => !!window.__skyhook.run.player.hook)); i++) await page.waitForTimeout(100);
     const len0 = await g(() => window.__skyhook.run.player.hook?.length ?? 0);
-    check(len0 > 10, `left click attaches the hook (rope ${len0.toFixed(1)} m)`);
+    check(len0 > 10, `the hook catches when it arrives (rope ${len0.toFixed(1)} m)`);
 
     await page.mouse.down({ button: 'right' });
     await page.waitForTimeout(1500);
@@ -186,8 +188,9 @@ async function waitForServer() {
     await page.waitForTimeout(500);
     check((await tutStep()) === 3, 'aiming at the orange block ticks off step 3');
     await page.mouse.down();
-    await page.waitForTimeout(500);
-    check((await tutStep()) === 4, 'firing the hook ticks off step 4');
+    let hs = 0;
+    for (let i = 0; i < 20 && hs < 4; i++) { await page.waitForTimeout(150); hs = await tutStep(); }
+    check(hs === 4, 'firing the hook ticks off step 4');
     await page.keyboard.down('KeyW');
     let st = 0;
     for (let i = 0; i < 20 && st < 5; i++) { await page.waitForTimeout(300); st = await tutStep(); }
@@ -220,6 +223,35 @@ async function waitForServer() {
     await page.click('#play-btn');
     await page.waitForTimeout(1500);
     await page.screenshot({ path: 'test-results/level-30.png' });
+
+    // Arm + grapple gun are drawn; rope starts at the gun's muzzle.
+    await page.goto(`${URL}?level=1`);
+    await page.waitForTimeout(1000);
+    await page.click('#play-btn');
+    await page.waitForTimeout(800);
+    check(await g(() => {
+      const vm = window.__skyhook.renderer.viewModel;
+      return vm.scene.children.includes(vm.root) && vm.claw.visible;
+    }), 'arm and grapple gun are drawn, with the claw loaded');
+    await g(() => {
+      const s = window.__skyhook; const p = s.run.player; const a = s.course.anchors[0].center;
+      const ex = a.x - p.pos.x, ey = a.y - (p.pos.y + 0.35), ez = a.z - p.pos.z;
+      p.yaw = Math.atan2(-ex, -ez); p.pitch = Math.atan2(ey, Math.hypot(ex, ez));
+      s.TUNING.hookSpeed = 20; // slow it down so the flight can be observed
+    });
+    await page.mouse.down();
+    await page.waitForTimeout(600);
+    const flight = await g(() => {
+      const s = window.__skyhook; const r = s.renderer; const pd = s.run.player.pending;
+      return { pending: !!pd, progress: pd ? pd.travel / pd.dist : 0, rope: r.rope.mesh.visible, head: r.hookHead.visible, claw: r.viewModel.claw.visible };
+    });
+    check(flight.pending && flight.progress > 0 && flight.progress < 1 && flight.rope && flight.head && !flight.claw,
+      `hook visibly travels to the block (rope and claw in flight, ${(flight.progress * 100).toFixed(0)}% of the way)`);
+    await page.mouse.up();
+    await page.waitForTimeout(300);
+    check(await g(() => !window.__skyhook.run.player.pending && !window.__skyhook.run.player.hook && window.__skyhook.renderer.viewModel.claw.visible),
+      'letting go before it lands cancels the shot and reloads the claw');
+    await g(() => { window.__skyhook.TUNING.hookSpeed = 250; });
 
     check(errors.length === 0, `no console errors${errors.length ? `: ${errors.join(' | ')}` : ''}`);
   } finally {

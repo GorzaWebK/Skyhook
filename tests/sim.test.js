@@ -120,6 +120,17 @@ test('hook raycast hits the first anchor from the start', () => {
   assert.ok(p.hook.length > 10);
 });
 
+test('raycast handles rays parallel to a box face (no phantom hits)', () => {
+  const course = buildTutorialCourse();
+  const p = createPlayer(course.spawn);
+  // Spawn is at x = 0, the same x as the tutorial smooth block's edge.
+  const hit = raycast(course, p.pos.clone().add(new Vector3(0, TUNING.eyeHeight, 0)), aimDirection(0, 0));
+  assert.ok(hit === null || Number.isFinite(hit.distance), `got ${hit?.distance}`);
+  // Straight down onto the start platform still works.
+  const down = raycast(course, p.pos.clone(), new Vector3(0, -1, 0));
+  assert.ok(down && down.box.kind === 'platform' && Math.abs(down.distance - p.pos.y) < 1e-6);
+});
+
 test('hook misses when aiming at empty sky', () => {
   const course = buildLevel(LEVELS[0]);
   const p = createPlayer(course.spawn);

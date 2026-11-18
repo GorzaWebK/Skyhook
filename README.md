@@ -44,6 +44,8 @@ The full controls list sits behind the **Controls** button on the main menu.
 - **Timer and best times:** The clock starts when you leave the start platform. Your best time and checkpoint splits for each level, and which levels you've unlocked, are saved in the browser.
 - **Splits:** At each checkpoint you see how far ahead (green) or behind (red) your best run you are.
 - **Falling:** Drop into the clouds and you go back to your last checkpoint while the clock keeps running. Before the first checkpoint, the run starts over.
+- **Grapple gun:** You hold a grapple gun in a gloved hand, drawn in first person and built from shapes in code. It sways as you look around, bobs as you walk, leans when you strafe, kicks when you fire, and its glowing spool spins when you reel in.
+- **Rope shot:** The hook visibly flies from the gun's muzzle to the block at 250 m/s, with the rope wiggling behind it, and catches when it lands. Let go before it lands and the shot is cancelled. The rope snaps taut when it catches and sags when it goes slack.
 - **Feel:** The view widens with speed, the camera shakes on hard landings and when the hook catches, and wind and rope-creak sounds follow your speed.
 - **Settings:** Mouse sensitivity and mute, both saved.
 
@@ -64,7 +66,9 @@ The full controls list sits behind the **Controls** button on the main menu.
 | `src/course.js` | Level generator and difficulty settings |
 | `src/levels.js` | The 30 levels: names and seeds |
 | `src/tutorial.js` | Tutorial steps and when each one is ticked off |
-| `src/render.js` | three.js scene, sky, clouds, rope |
+| `src/render.js` | three.js scene, sky, clouds, hook head |
+| `src/viewmodel.js` | First-person arm and grapple gun |
+| `src/rope.js` | Rope drawn as a camera-facing strip |
 | `src/textures.js` | Textures drawn on a canvas |
 | `src/audio.js` | Synthesised sound effects |
 | `src/input.js` | Keyboard, mouse and pointer lock |

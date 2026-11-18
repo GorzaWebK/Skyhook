@@ -1,7 +1,7 @@
 import { isHookable, insideBox, buildTutorialCourse } from './course.js';
 import { TUTORIAL_STEPS, createTutorialFlags } from './tutorial.js';
 import { LEVELS, buildLevel } from './levels.js';
-import { raycast, eyePosition, aimDirection, FIXED_DT } from './physics.js';
+import { raycast, eyePosition, aimDirection, FIXED_DT, TUNING } from './physics.js';
 import { createRun, restartRun, tick, hook, unhook } from './run.js';
 import { createBot, botInput } from './bot.js';
 import { Renderer } from './render.js';
@@ -298,6 +298,11 @@ function handleEvents(events) {
         sound.land(e.speed);
         if (e.speed > 15) renderer.addShake(Math.min(0.6, e.speed / 60));
         break;
+      case 'attach':
+        sound.attach();
+        renderer.addShake(0.15);
+        renderer.ropeSnap();
+        break;
       case 'jump':
         sound.jump();
         if (tut) tut.flags.jumped = true;
@@ -314,10 +319,9 @@ function currentAim() {
 
 input.handlers.hookDown = () => {
   if (state !== 'playing') return;
-  sound.hookFire();
+  renderer.fire();
   if (hook(run, currentAim())) {
-    sound.attach();
-    renderer.addShake(0.15);
+    sound.hookFire();
   } else {
     sound.miss();
   }
@@ -408,8 +412,11 @@ function frame(now) {
   last = now;
   const p = run.player;
 
+  let mx = 0;
+  let my = 0;
+  let move = { forward: 0, right: 0, reel: false };
   if (state === 'playing' || state === 'finished') {
-    const [mx, my] = input.consumeMouse();
+    [mx, my] = input.consumeMouse();
     const k = 0.0022 * settings.sensitivity;
     p.yaw -= mx * k;
     p.pitch = Math.max(-1.55, Math.min(1.55, p.pitch - my * k));
@@ -418,7 +425,7 @@ function frame(now) {
 
     accumulator += dt;
     while (accumulator >= FIXED_DT) {
-      const move = bot ? botInput(bot) : input.movement();
+      move = bot ? botInput(bot) : input.movement();
       handleEvents(tick(run, move, FIXED_DT));
       accumulator -= FIXED_DT;
     }
@@ -432,7 +439,7 @@ function frame(now) {
 
   // What would the hook grab right now?
   const target = state === 'menu' ? null : raycast(course, eyePosition(p), currentAim());
-  ui.crosshair.className = p.hook ? 'hooked' : target && isHookable(target.box) ? 'in-range' : target ? 'blocked' : '';
+  ui.crosshair.className = p.hook || p.pending ? 'hooked' : target && isHookable(target.box) ? 'in-range' : target ? 'blocked' : '';
   if (tut && state === 'playing') updateTutorial(target);
 
   ui.timer.textContent = formatTime(run.time);
@@ -443,7 +450,10 @@ function frame(now) {
   if (toastTimer > 0 && (toastTimer -= dt) <= 0) ui.toast.classList.remove('show');
   if (splitTimer > 0 && (splitTimer -= dt) <= 0) ui.split.classList.remove('show');
 
-  renderer.render(p, target && isHookable(target.box) ? target : null, dt);
+  if (!bot && state === 'playing') move = input.movement();
+  renderer.render(p, target && isHookable(target.box) ? target : null, dt, {
+    mouseDX: mx, mouseDY: my, right: move.right, reeling: move.reel,
+  });
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
@@ -458,5 +468,5 @@ window.__skyhook = {
   get tutorial() { return tut; },
   get state() { return state; },
   get lastRelease() { return lastRelease; },
-  renderer, restart, loadLevel, loadTutorial, formatTime,
+  renderer, restart, loadLevel, loadTutorial, formatTime, TUNING,
 };

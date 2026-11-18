@@ -1,5 +1,5 @@
 import { insideBox } from './course.js';
-import { createPlayer, resetPlayer, step, tryHook, releaseHook, FIXED_DT, TUNING } from './physics.js';
+import { createPlayer, resetPlayer, step, fireHook, releaseHook, FIXED_DT, TUNING } from './physics.js';
 
 // One attempt at a course: the timer, checkpoints, finish and respawning.
 // No rendering here, so it runs the same in the browser and in Node tests.
@@ -37,7 +37,7 @@ export function respawn(run) {
 
 export function hook(run, dir) {
   if (run.finished) return null;
-  return tryHook(run.player, run.course, dir);
+  return fireHook(run.player, run.course, dir);
 }
 
 export function unhook(run) {
@@ -53,6 +53,7 @@ export function tick(run, input, dt = FIXED_DT) {
   const stepEvents = step(p, run.finished ? { forward: 0, right: 0 } : input, course, dt);
   if (stepEvents.landed > 4) events.push({ type: 'land', speed: stepEvents.landed });
   if (stepEvents.jumped) events.push({ type: 'jump' });
+  if (stepEvents.attached) events.push({ type: 'attach' });
 
   if (run.finished) {
     // Glide to a gentle hover behind the finish screen.

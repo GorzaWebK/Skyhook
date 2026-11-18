@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { makePanelTexture, makeStripeTexture, makeCloudTexture } from './textures.js';
 import { eyePosition } from './physics.js';
+import { ViewModel, makeClaw } from './viewmodel.js';
+import { Rope } from './rope.js';
 
 const SKY_TOP = new THREE.Color('#3b7bd4');
 const SKY_HORIZON = new THREE.Color('#bfdcf2');
@@ -113,6 +115,7 @@ export class Renderer {
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
+    this.renderer.autoClear = false; // world pass, then the arm on top
 
     this.scene = new THREE.Scene();
     this.scene.fog = new THREE.Fog(SKY_HORIZON, 150, 700);
@@ -133,8 +136,10 @@ export class Renderer {
     this.addClouds();
     this.addRope();
     this.addTargetMarker();
+    this.viewModel = new ViewModel();
 
     this.shake = 0;
+    this.snapT = 0;
     this.time = 0;
     this.resize();
     window.addEventListener('resize', () => this.resize());
@@ -146,6 +151,7 @@ export class Renderer {
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
+    this.viewModel?.resize(w / h);
   }
 
   addClouds() {
@@ -176,20 +182,22 @@ export class Renderer {
   }
 
   addRope() {
-    // Tapered: hair-thin at your hand, thicker at the anchor end, so it never
-    // fills the screen up close but is still visible far away.
-    const geo = new THREE.CylinderGeometry(0.07, 0.006, 1, 6, 1, true);
-    geo.translate(0, 0.5, 0);
-    this.rope = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: '#2b2b33' }));
-    this.rope.visible = false;
-    this.rope.frustumCulled = false;
-    this.scene.add(this.rope);
-    this.hookHead = new THREE.Mesh(
-      new THREE.OctahedronGeometry(0.28),
-      new THREE.MeshStandardMaterial({ color: '#444', metalness: 0.8, roughness: 0.3 })
-    );
+    this.rope = new Rope();
+    this.scene.add(this.rope.mesh);
+    // The hook head that flies out: the gun's claw, scaled up to be visible.
+    this.hookHead = makeClaw();
+    this.hookHead.scale.setScalar(7);
     this.hookHead.visible = false;
     this.scene.add(this.hookHead);
+  }
+
+  fire() {
+    this.viewModel.fire();
+  }
+
+  ropeSnap() {
+    this.snapT = 1;
+    this.viewModel.ropeSnap();
   }
 
   addTargetMarker() {
@@ -256,8 +264,59 @@ export class Renderer {
     this.shake = Math.min(1, this.shake + amount);
   }
 
+  updateRope(player) {
+    const pd = player.pending;
+    const hook = player.hook;
+    if (!pd && !hook) {
+      this.rope.hide();
+      this.hookHead.visible = false;
+      return;
+    }
+    const cam = this.camera;
+    const S = this.viewModel.muzzleWorld(cam);
+    const E = pd
+      ? pd.origin.clone().addScaledVector(pd.dir, Math.min(pd.travel, pd.dist))
+      : hook.point.clone();
+    const dir = E.clone().sub(S);
+    const len = dir.length();
+    const dirN = dir.clone().divideScalar(len || 1);
+    const camFwd = cam.getWorldDirection(new THREE.Vector3());
+    const side = new THREE.Vector3().crossVectors(dirN, camFwd);
+    if (side.lengthSq() < 1e-6) side.set(1, 0, 0);
+    side.normalize();
+    const up = new THREE.Vector3().crossVectors(side, dirN).normalize();
+    const t = this.time;
+
+    // While flying: a wave that settles as the hook nears its target.
+    const progress = pd ? Math.min(1, pd.travel / pd.dist) : 1;
+    const flyAmp = pd ? 0.35 * (1 - progress) * Math.min(1, len / 6) : 0;
+    // After catching: a quick wobble, plus sag when the rope is slack.
+    const snapAmp = 0.25 * this.snapT * this.snapT;
+    let sag = 0;
+    if (hook) {
+      const d = player.pos.distanceTo(hook.point);
+      sag = Math.min(4, Math.sqrt(Math.max(0, hook.length * hook.length - d * d)) * 0.5);
+    }
+
+    this.rope.update((u, out) => {
+      const bell = Math.sin(u * Math.PI);
+      out.copy(S).addScaledVector(dir, u);
+      if (flyAmp) {
+        out.addScaledVector(side, flyAmp * Math.sin(u * Math.PI * 5 - t * 40) * bell);
+        out.addScaledVector(up, flyAmp * 0.5 * Math.cos(u * Math.PI * 3 - t * 30) * bell);
+      }
+      if (snapAmp) out.addScaledVector(side, snapAmp * Math.sin(u * Math.PI * 6 + t * 50) * bell);
+      if (sag) out.y -= sag * bell;
+    }, cam.position);
+
+    this.hookHead.visible = true;
+    this.hookHead.position.copy(E);
+    this.hookHead.lookAt(E.clone().sub(dirN)); // claw points along -Z
+  }
+
   // target: raycast hit under the crosshair (or null)
-  render(player, target, dt) {
+  // view: { mouseDX, mouseDY, right, reeling } for the arm animation
+  render(player, target, dt, view = {}) {
     this.time += dt;
     const cam = this.camera;
     eyePosition(player, cam.position);
@@ -279,26 +338,23 @@ export class Renderer {
     cam.updateProjectionMatrix();
     cam.updateMatrixWorld();
 
-    // Rope from just below-right of the camera to the anchor.
-    if (player.hook) {
-      const start = new THREE.Vector3(0.3, -0.35, -0.6).applyMatrix4(cam.matrixWorld);
-      const end = player.hook.point;
-      const dir = end.clone().sub(start);
-      const len = dir.length();
-      this.rope.position.copy(start);
-      this.rope.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize());
-      this.rope.scale.set(1, len, 1);
-      this.rope.visible = true;
-      this.hookHead.position.copy(end);
-      this.hookHead.rotation.y += dt * 4;
-      this.hookHead.visible = true;
-    } else {
-      this.rope.visible = false;
-      this.hookHead.visible = false;
-    }
+    // Arm and gun.
+    this.viewModel.update(dt, {
+      mouseDX: view.mouseDX || 0,
+      mouseDY: view.mouseDY || 0,
+      right: view.right || 0,
+      grounded: player.grounded,
+      speed: Math.hypot(player.vel.x, player.vel.z),
+      velY: player.vel.y,
+      reeling: !!(player.hook && view.reeling),
+      hookOut: !!(player.hook || player.pending),
+    });
 
+    // Rope from the gun's muzzle to the hook.
+    this.snapT = Math.max(0, this.snapT - dt * 4);
+    this.updateRope(player);
     // Marker on the surface the crosshair would hook.
-    if (target && !player.hook) {
+    if (target && !player.hook && !player.pending) {
       this.marker.visible = true;
       this.marker.position.copy(target.point);
       this.marker.lookAt(cam.position);
@@ -319,7 +375,10 @@ export class Renderer {
       layer.tex.offset.y = this.time * 0.001 * layer.speed;
     }
 
+    this.renderer.clear();
     this.renderer.render(this.scene, cam);
+    this.renderer.clearDepth();
+    this.renderer.render(this.viewModel.scene, this.viewModel.camera);
   }
 }
 

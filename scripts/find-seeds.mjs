@@ -5,6 +5,7 @@ import { writeFileSync } from 'node:fs';
 import { generateLevel } from '../src/course.js';
 import { createRun, tick } from '../src/run.js';
 import { createBot, botInput } from '../src/bot.js';
+import { LEVEL_SEEDS as CURRENT } from '../src/level-seeds.js';
 
 const LEVEL_COUNT = 30;
 
@@ -25,8 +26,11 @@ export function botRun(course, maxSeconds = 240) {
 const seeds = [];
 for (let i = 0; i < LEVEL_COUNT; i++) {
   let found = null;
-  for (let k = 0; k < 400 && !found; k++) {
-    const seed = 1000 * (i + 1) + k;
+  // Keep the level's current layout if it still works, so players' best
+  // times stay meaningful; otherwise search for a new one.
+  const candidates = [CURRENT[i], ...Array.from({ length: 400 }, (_, k) => 1000 * (i + 1) + k)].filter((x) => x != null);
+  for (let k = 0; k < candidates.length && !found; k++) {
+    const seed = candidates[k];
     const course = generateLevel(i, seed, LEVEL_COUNT);
     const r = botRun(course);
     if (r.finished && r.falls === 0 && r.checkpoints.join() === course.checkpoints.map((c) => c.index).join()) {

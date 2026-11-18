@@ -7,6 +7,7 @@ export const TUNING = {
   radius: 0.5,
   eyeHeight: 0.35, // camera offset above the player's centre
   hookRange: 55,
+  hookSpeed: 250, // how fast the fired hook flies to its target (m/s)
   reelSpeed: 17, // how fast holding right mouse shortens the rope (m/s)
   minRope: 2,
   releaseHopUp: 10, // upward speed given when you let go of the rope (m/s)
@@ -33,7 +34,8 @@ export function createPlayer(spawn) {
     pitch: 0,
     grounded: false,
     groundBox: null,
-    hook: null, // { point: Vector3, length: number, box }
+    hook: null, // { point: Vector3, length: number, box, time }
+    pending: null, // hook in flight: { point, box, origin, dir, dist, travel }
   };
 }
 
@@ -45,6 +47,7 @@ export function resetPlayer(player, spawn) {
   player.grounded = false;
   player.groundBox = null;
   player.hook = null;
+  player.pending = null;
 }
 
 export function eyePosition(player, out = new Vector3()) {
@@ -61,6 +64,12 @@ function rayBox(o, d, b, maxDist) {
   let tmin = 0;
   let tmax = maxDist;
   for (const axis of ['x', 'y', 'z']) {
+    if (Math.abs(d[axis]) < 1e-12) {
+      // Ray runs parallel to this pair of faces: it hits only if it starts
+      // between them. (Avoids 0 * Infinity = NaN.)
+      if (o[axis] < b.min[axis] || o[axis] > b.max[axis]) return -1;
+      continue;
+    }
     const inv = 1 / d[axis];
     let t1 = (b.min[axis] - o[axis]) * inv;
     let t2 = (b.max[axis] - o[axis]) * inv;
@@ -83,13 +92,31 @@ export function raycast(course, origin, dir, maxDist = TUNING.hookRange) {
   return best;
 }
 
+function attachHook(player, point, box) {
+  const toAnchor = point.clone().sub(player.pos);
+  const dist = toAnchor.length();
+  player.hook = { point, length: Math.max(TUNING.minRope, dist), box, time: 0 };
+  player.pending = null;
+  if (dist > 0.001) player.vel.addScaledVector(toAnchor.divideScalar(dist), TUNING.attachTug);
+}
+
+// Fire the hook: it flies to whatever is under the crosshair and catches
+// when it arrives (see step). Returns the hit, or null if there's nothing
+// hookable in range.
+export function fireHook(player, course, dir) {
+  const origin = eyePosition(player);
+  const hit = raycast(course, origin, dir);
+  if (!hit || !isHookable(hit.box)) return null;
+  player.hook = null;
+  player.pending = { point: hit.point, box: hit.box, origin, dir: dir.clone(), dist: hit.distance, travel: 0 };
+  return hit;
+}
+
+// Instant version (no flight time), used by tests.
 export function tryHook(player, course, dir) {
   const hit = raycast(course, eyePosition(player), dir);
   if (!hit || !isHookable(hit.box)) return null;
-  const toAnchor = hit.point.clone().sub(player.pos);
-  const dist = toAnchor.length();
-  player.hook = { point: hit.point, length: Math.max(TUNING.minRope, dist), box: hit.box, time: 0 };
-  if (dist > 0.001) player.vel.addScaledVector(toAnchor.divideScalar(dist), TUNING.attachTug);
+  attachHook(player, hit.point, hit.box);
   return hit;
 }
 
@@ -99,7 +126,12 @@ export function tryHook(player, course, dir) {
 export function releaseHook(player, { hop = false } = {}) {
   const hook = player.hook;
   player.hook = null;
-  if (!hook) return { released: false, hopped: false };
+  if (!hook) {
+    // Let go while the hook was still flying: the shot is cancelled.
+    const cancelled = !!player.pending;
+    player.pending = null;
+    return { released: false, hopped: false, cancelled };
+  }
   const t = TUNING;
   if (hop && hook.time >= t.releaseHopMinHold) {
     player.vel.y = Math.max(player.vel.y, 0) + t.releaseHopUp;
@@ -156,6 +188,16 @@ export function step(player, input, course, dt = FIXED_DT) {
 
   player.vel.y -= t.gravity * dt;
   player.vel.multiplyScalar(1 - t.drag * dt);
+
+  // A fired hook travels towards its target and catches when it arrives.
+  if (player.pending) {
+    const pd = player.pending;
+    pd.travel += t.hookSpeed * dt;
+    if (pd.travel >= pd.dist) {
+      attachHook(player, pd.point, pd.box);
+      events.attached = true;
+    }
+  }
 
   // The rope keeps the length it had when it caught, unless you reel in.
   let reeling = false;

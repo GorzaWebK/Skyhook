@@ -39,6 +39,7 @@ export function botInput(bot) {
   _dir.normalize();
   p.pitch = Math.asin(_dir.y);
 
+  if (p.pending) return input; // hook still flying
   if (!p.hook) {
     const falling = p.vel.y < 2 || p.grounded;
     if (dist < TUNING.hookRange - 3 && dist > 12 && falling) {
