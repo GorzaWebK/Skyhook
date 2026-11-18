@@ -163,6 +163,56 @@ async function waitForServer() {
     await page.waitForTimeout(800);
     check(await g(() => window.__skyhook.level.number === 2 && window.__skyhook.state === 'playing'), 'clicking a level tile starts that level');
 
+    // Tutorial: highlighted for new players; play through the first steps.
+    await page.goto(URL);
+    await page.waitForTimeout(1000);
+    check(await g(() => document.getElementById('tutorial-btn').classList.contains('highlight')), 'Tutorial button is highlighted for new players');
+    await page.click('#tutorial-btn');
+    await page.waitForTimeout(800);
+    const tutStep = () => g(() => window.__skyhook.tutorial?.step);
+    check(await g(() => window.__skyhook.level.tutorial && window.__skyhook.state === 'playing') && await page.isVisible('#tutorial'), 'Tutorial button starts the tutorial with the prompt box');
+    check((await tutStep()) === 0 && (await page.textContent('#tut-text')).includes('look around'), 'step 1 asks you to look around');
+    for (let i = 0; i < 8; i++) await g(() => document.dispatchEvent(new MouseEvent('mousemove', { movementX: 120, movementY: 0 })));
+    await page.waitForTimeout(500);
+    check((await tutStep()) === 1, 'looking around ticks off step 1');
+    await page.keyboard.press('Space');
+    await page.waitForTimeout(500);
+    check((await tutStep()) === 2, 'jumping ticks off step 2');
+    await g(() => {
+      const s = window.__skyhook; const p = s.run.player; const a = s.course.anchors[0].center;
+      const ex = a.x - p.pos.x, ey = a.y - (p.pos.y + 0.35), ez = a.z - p.pos.z;
+      p.yaw = Math.atan2(-ex, -ez); p.pitch = Math.atan2(ey, Math.hypot(ex, ez));
+    });
+    await page.waitForTimeout(500);
+    check((await tutStep()) === 3, 'aiming at the orange block ticks off step 3');
+    await page.mouse.down();
+    await page.waitForTimeout(500);
+    check((await tutStep()) === 4, 'firing the hook ticks off step 4');
+    await page.keyboard.down('KeyW');
+    let st = 0;
+    for (let i = 0; i < 20 && st < 5; i++) { await page.waitForTimeout(300); st = await tutStep(); }
+    await page.keyboard.up('KeyW');
+    check(st === 5, 'swinging off the edge ticks off step 5');
+    await page.screenshot({ path: 'test-results/tutorial.png' });
+    await page.mouse.up();
+    await page.waitForTimeout(400);
+    check((await tutStep()) === 6, 'letting go mid-air ticks off step 6');
+
+    // Autopilot finishes the tutorial -> tutorial complete, N goes to level 1.
+    await page.goto(`${URL}?bot=1&tutorial=1`);
+    state = '';
+    for (let i = 0; i < 160 && state !== 'finished'; i++) {
+      await page.waitForTimeout(500);
+      state = await g(() => window.__skyhook.state);
+    }
+    check(state === 'finished' && (await page.textContent('#finish-title')) === 'Tutorial complete!', 'finishing the tutorial shows "Tutorial complete!"');
+    await page.keyboard.press('KeyN');
+    await page.waitForTimeout(500);
+    check(await g(() => window.__skyhook.level.number === 1 && !window.__skyhook.tutorial), 'N after the tutorial starts level 1');
+    await page.goto(URL);
+    await page.waitForTimeout(800);
+    check(await g(() => !document.getElementById('tutorial-btn').classList.contains('highlight')), 'Tutorial highlight goes away once it is done');
+
     // Late levels render with smooth blocks and no errors.
     await page.goto(`${URL}?unlock=all&level=30`);
     await page.waitForTimeout(1500);

@@ -144,6 +144,38 @@ export function generateLevel(index, seed, levelCount = 30) {
   return { seed, boxes, anchors, checkpoints, finish, spawn, startZone, killY: -45 };
 }
 
+// Hand-built course for the tutorial: big, close anchors, one checkpoint
+// and one smooth block to learn about.
+export function buildTutorialCourse() {
+  const rand = mulberry32(42);
+  const boxes = [];
+  const anchors = [];
+  const checkpoints = [];
+  const { spawn, startZone } = startArea(boxes);
+  const anchor = (x, y, z, s) => {
+    const a = box(new Vector3(x, y, z), new Vector3(s, s, s), 'anchor');
+    boxes.push(a);
+    anchors.push(a);
+  };
+
+  anchor(0, 20, -26, 6); // first hook, from the start platform
+  anchor(0, 22, -54, 6);
+  anchor(5, 25, -82, 5.5); // reel practice
+  addCheckpoint(boxes, checkpoints, 5, 7, -104);
+  anchor(0, 24, -128, 5.5);
+  const smooth = box(new Vector3(-4, 12, -142), new Vector3(8, 8, 2), 'blocker');
+  boxes.push(smooth);
+  anchor(-5, 24, -156, 5.5);
+  anchor(0, 26, -184, 5);
+  const finish = addFinish(boxes, 0, 8, -214);
+  addPillars(boxes, rand, -214);
+
+  return {
+    seed: 0, boxes, anchors, checkpoints, finish, spawn, startZone, killY: -45,
+    tutorial: { smoothBlock: smooth },
+  };
+}
+
 export function insideBox(p, b) {
   return (
     p.x >= b.min.x && p.x <= b.max.x &&

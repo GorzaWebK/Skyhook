@@ -135,6 +135,11 @@ export class Sound {
     this.burst({ freq: 400, q: 0.7, dur: 0.12, gain: g * 0.6, type: 'lowpass' });
   }
 
+  step() {
+    this.tone({ type: 'sine', freq: 880, dur: 0.12, gain: 0.12 });
+    this.tone({ type: 'sine', freq: 1320, dur: 0.18, gain: 0.1, delay: 0.07 });
+  }
+
   checkpoint() {
     this.tone({ type: 'triangle', freq: 660, dur: 0.18, gain: 0.25 });
     this.tone({ type: 'triangle', freq: 990, dur: 0.3, gain: 0.25, delay: 0.09 });

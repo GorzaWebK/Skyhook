@@ -1,4 +1,5 @@
-import { isHookable } from './course.js';
+import { isHookable, insideBox, buildTutorialCourse } from './course.js';
+import { TUTORIAL_STEPS, createTutorialFlags } from './tutorial.js';
 import { LEVELS, buildLevel } from './levels.js';
 import { raycast, eyePosition, aimDirection, FIXED_DT } from './physics.js';
 import { createRun, restartRun, tick, hook, unhook } from './run.js';
@@ -18,6 +19,8 @@ const ui = {
   cp: $('cp'), levelLabel: $('level-label'), crosshair: $('crosshair'), toast: $('toast'),
   menu: $('menu'), screens: document.querySelectorAll('.screen'),
   playBtn: $('play-btn'), restartBtn: $('restart-btn'), levelsBtn: $('levels-btn'), controlsBtn: $('controls-btn'),
+  tutorialBtn: $('tutorial-btn'), newHint: $('new-hint'),
+  tutorial: $('tutorial'), tutStep: $('tut-step'), tutText: $('tut-text'),
   courseName: $('course-name'), menuBest: $('menu-best'),
   levelGrid: $('level-grid'), levelProgress: $('level-progress'),
   sens: $('sens'), sensVal: $('sens-val'), mute: $('mute'),
@@ -41,7 +44,9 @@ const progress = storage.getProgress();
 
 // --- Level state --------------------------------------------------------------
 
-let level = null; // entry from LEVELS
+const TUTORIAL = { id: 'tutorial', number: 0, index: -1, name: 'Tutorial', tutorial: true };
+
+let level = null; // entry from LEVELS, or TUTORIAL
 let course = null;
 let run = null;
 let bot = null;
@@ -53,6 +58,7 @@ let state = 'menu';
 let toastTimer = 0;
 let splitTimer = 0;
 let lastRelease = null;
+let tut = null; // { flags, step } while playing the tutorial
 
 function unlockedCount() {
   return unlockAll ? LEVELS.length : Math.max(1, Math.min(LEVELS.length, progress.unlocked));
@@ -62,27 +68,73 @@ function isUnlocked(index) {
   return index < unlockedCount();
 }
 
-function loadLevel(index) {
-  level = LEVELS[index];
-  course = buildLevel(level);
+function levelTitle(l) {
+  return l.tutorial ? 'Tutorial' : `Level ${l.number}: ${l.name}`;
+}
+
+function loadDef(def) {
+  level = def;
+  course = def.tutorial ? buildTutorialCourse() : buildLevel(def);
   run = createRun(course);
   bot = botMode ? createBot(run) : null;
-  best = storage.getBest(level.id);
+  best = storage.getBest(def.id);
   splits = [];
   renderer.buildCourse(course);
-  progress.last = index;
-  storage.setProgress(progress);
+  if (!def.tutorial) {
+    progress.last = def.index;
+    storage.setProgress(progress);
+  }
+  tut = def.tutorial ? { flags: createTutorialFlags(), step: 0 } : null;
+  ui.tutorial.classList.toggle('hidden', !tut);
+  if (tut) showTutorialStep();
   ui.finish.classList.add('hidden');
   ui.split.className = '';
-  ui.levelLabel.textContent = `Level ${level.number} · ${level.name}`;
+  ui.levelLabel.textContent = def.tutorial ? 'Tutorial' : `Level ${def.number} · ${def.name}`;
   refreshBest();
   updateCheckpointLabel();
+}
+
+function loadLevel(index) {
+  loadDef(LEVELS[index]);
+}
+
+function loadTutorial() {
+  loadDef(TUTORIAL);
+}
+
+// --- Tutorial -----------------------------------------------------------------
+
+function showTutorialStep() {
+  ui.tutStep.textContent = `Step ${tut.step + 1} / ${TUTORIAL_STEPS.length}`;
+  ui.tutText.innerHTML = TUTORIAL_STEPS[tut.step].text;
+  ui.tutorial.classList.remove('pop');
+  void ui.tutorial.offsetWidth; // restart the pop animation
+  ui.tutorial.classList.add('pop');
+}
+
+function updateTutorial(target) {
+  const f = tut.flags;
+  const p = run.player;
+  if (target?.box.kind === 'anchor') f.aimedAnchor = true;
+  if (p.hook) f.hooked = true;
+  if (p.hook && !insideBox(p.pos, course.startZone) && p.vel.length() > 10) f.swung = true;
+  if (run.checkpoint >= 0) f.checkpoint = true;
+  if (run.checkpoint >= 0 && p.pos.z < course.tutorial.smoothBlock.min.z - 4) f.pastSmooth = true;
+  let advanced = false;
+  while (tut.step < TUTORIAL_STEPS.length - 1 && TUTORIAL_STEPS[tut.step].done(f)) {
+    tut.step++;
+    advanced = true;
+  }
+  if (advanced) {
+    sound.step();
+    showTutorialStep();
+  }
 }
 
 function refreshBest() {
   ui.best.textContent = best ? `Best ${formatTime(best.time)}` : 'No best time yet';
   ui.menuBest.textContent = best ? formatTime(best.time) : '--';
-  ui.courseName.textContent = `Level ${level.number}: ${level.name}`;
+  ui.courseName.textContent = levelTitle(level);
 }
 
 function showToast(text, color) {
@@ -105,6 +157,10 @@ function updateCheckpointLabel() {
 
 function restart() {
   restartRun(run);
+  if (tut) {
+    tut = { flags: createTutorialFlags(), step: 0 };
+    showTutorialStep();
+  }
   splits = [];
   if (bot) Object.assign(bot, createBot(run));
   renderer.setCheckpointReached(-1);
@@ -126,6 +182,8 @@ function refreshMainScreen() {
   const inProgress = run.started && !run.finished;
   ui.playBtn.textContent = inProgress ? 'RESUME' : 'PLAY';
   ui.restartBtn.classList.toggle('hidden', !inProgress);
+  ui.tutorialBtn.classList.toggle('highlight', !progress.tutorialDone);
+  ui.newHint.classList.toggle('hidden', !!progress.tutorialDone);
   refreshBest();
 }
 
@@ -163,7 +221,27 @@ function setState(next) {
 
 // --- Game events --------------------------------------------------------------
 
+function finishTutorial(e) {
+  sound.finish();
+  progress.tutorialDone = true;
+  storage.setProgress(progress);
+  if (!best || e.time < best.time) {
+    best = { time: e.time, splits: [...splits] };
+    storage.setBest(level.id, best);
+    refreshBest();
+  }
+  ui.finishTitle.textContent = 'Tutorial complete!';
+  ui.finishTime.textContent = formatTime(e.time);
+  ui.finishNote.textContent = "You've got the basics. Time for the real thing.";
+  ui.finishNote.className = 'record';
+  ui.finishHint.innerHTML = '<kbd>N</kbd> start Level 1 · <kbd>R</kbd> try again · <kbd>Esc</kbd> menu';
+  ui.tutorial.classList.add('hidden');
+  state = 'finished';
+  ui.finish.classList.remove('hidden');
+}
+
 function finishLevel(e) {
+  if (level.tutorial) return finishTutorial(e);
   sound.finish();
   const isRecord = !best || e.time < best.time;
   ui.finishTitle.textContent = `Level ${level.number} complete!`;
@@ -222,6 +300,7 @@ function handleEvents(events) {
         break;
       case 'jump':
         sound.jump();
+        if (tut) tut.flags.jumped = true;
         break;
     }
   }
@@ -246,13 +325,14 @@ input.handlers.hookDown = () => {
 input.handlers.hookUp = () => {
   const r = unhook(run);
   if (r.released) lastRelease = { ...r, velY: run.player.vel.y };
+  if (tut && r.released && run.started && !run.player.grounded) tut.flags.flung = true;
   if (r.hopped) sound.hop();
   else if (r.released) sound.release();
 };
 input.handlers.key = (code) => {
   if (code === 'KeyR' && state !== 'menu') restart();
   if ((code === 'KeyN' || code === 'Enter') && state === 'finished' && level.index + 1 < LEVELS.length) {
-    loadLevel(level.index + 1);
+    loadLevel(level.index + 1); // the tutorial's index is -1, so this goes to level 1
     state = 'playing';
   }
   if (code === 'KeyM') {
@@ -290,6 +370,10 @@ ui.restartBtn.addEventListener('click', () => {
 });
 ui.levelsBtn.addEventListener('click', () => showScreen('levels'));
 ui.controlsBtn.addEventListener('click', () => showScreen('controls'));
+ui.tutorialBtn.addEventListener('click', () => {
+  loadTutorial();
+  startPlaying();
+});
 for (const b of document.querySelectorAll('[data-back]')) b.addEventListener('click', () => showScreen('main'));
 
 ui.sens.value = settings.sensitivity;
@@ -312,7 +396,8 @@ const requested = Number(params.get('level')) - 1;
 const startIndex = Number.isInteger(requested) && requested >= 0 && requested < LEVELS.length && isUnlocked(requested)
   ? requested
   : isUnlocked(progress.last) ? progress.last : 0;
-loadLevel(startIndex);
+if (params.has('tutorial')) loadTutorial();
+else loadLevel(startIndex);
 showScreen('main');
 
 let last = performance.now();
@@ -328,12 +413,18 @@ function frame(now) {
     const k = 0.0022 * settings.sensitivity;
     p.yaw -= mx * k;
     p.pitch = Math.max(-1.55, Math.min(1.55, p.pitch - my * k));
+    if (tut) tut.flags.look += (Math.abs(mx) + Math.abs(my)) * k;
+    const before = tut ? { x: p.pos.x, z: p.pos.z, len: p.hook?.length, hook: p.hook } : null;
 
     accumulator += dt;
     while (accumulator >= FIXED_DT) {
       const move = bot ? botInput(bot) : input.movement();
       handleEvents(tick(run, move, FIXED_DT));
       accumulator -= FIXED_DT;
+    }
+    if (tut) {
+      if (p.grounded) tut.flags.walked += Math.hypot(p.pos.x - before.x, p.pos.z - before.z);
+      if (p.hook && p.hook === before.hook) tut.flags.reeled += Math.max(0, before.len - p.hook.length);
     }
   } else {
     accumulator = 0;
@@ -342,6 +433,7 @@ function frame(now) {
   // What would the hook grab right now?
   const target = state === 'menu' ? null : raycast(course, eyePosition(p), currentAim());
   ui.crosshair.className = p.hook ? 'hooked' : target && isHookable(target.box) ? 'in-range' : target ? 'blocked' : '';
+  if (tut && state === 'playing') updateTutorial(target);
 
   ui.timer.textContent = formatTime(run.time);
   const speed = p.vel.length();
@@ -363,7 +455,8 @@ window.__skyhook = {
   get run() { return run; },
   get course() { return course; },
   get level() { return level; },
+  get tutorial() { return tut; },
   get state() { return state; },
   get lastRelease() { return lastRelease; },
-  renderer, restart, loadLevel, formatTime,
+  renderer, restart, loadLevel, loadTutorial, formatTime,
 };

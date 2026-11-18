@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Vector3 } from 'three';
-import { generateLevel, levelParams, isHookable } from '../src/course.js';
+import { generateLevel, levelParams, isHookable, buildTutorialCourse } from '../src/course.js';
+import { TUTORIAL_STEPS, createTutorialFlags } from '../src/tutorial.js';
 import { LEVELS, buildLevel } from '../src/levels.js';
 import { createPlayer, step, tryHook, releaseHook, raycast, aimDirection, TUNING, FIXED_DT } from '../src/physics.js';
 import { createRun, tick } from '../src/run.js';
@@ -162,6 +163,41 @@ test('smooth blocks cannot be hooked', () => {
   const dir = blocker.center.clone().sub(p.pos.clone().add(new Vector3(0, TUNING.eyeHeight, 0))).normalize();
   assert.equal(tryHook(p, course, dir), null);
   assert.equal(p.hook, null);
+});
+
+test('tutorial course: first anchor is reachable from the start and the autopilot finishes it', () => {
+  const course = buildTutorialCourse();
+  const p = createPlayer(course.spawn);
+  const eye = p.pos.clone().add(new Vector3(0, TUNING.eyeHeight, 0));
+  assert.ok(eye.distanceTo(course.anchors[0].center) < TUNING.hookRange - 10);
+  assert.equal(course.checkpoints.length, 1);
+  assert.ok(course.boxes.some((b) => b.kind === 'blocker'), 'has a smooth block to learn about');
+  const run = createRun(course);
+  const bot = createBot(run);
+  let finish = null;
+  for (let i = 0; i < 120 * 120 && !finish; i++) {
+    finish = tick(run, botInput(bot)).find((e) => e.type === 'finish') || finish;
+  }
+  assert.ok(finish, 'finished');
+  assert.equal(run.falls, 0);
+});
+
+test('tutorial steps tick off in order, and doing one early still counts', () => {
+  const f = createTutorialFlags();
+  const stepAfter = () => {
+    let i = 0;
+    while (i < TUTORIAL_STEPS.length - 1 && TUTORIAL_STEPS[i].done(f)) i++;
+    return i;
+  };
+  assert.equal(stepAfter(), 0);
+  f.hooked = true; // done early: doesn't skip ahead on its own
+  assert.equal(stepAfter(), 0);
+  f.look = 2;
+  f.jumped = true;
+  f.aimedAnchor = true;
+  assert.equal(stepAfter(), 4, 'look, move, aim and the early hook all count');
+  Object.assign(f, { swung: true, flung: true, reeled: 5, checkpoint: true, pastSmooth: true });
+  assert.equal(stepAfter(), TUTORIAL_STEPS.length - 1, 'ends on the finish step');
 });
 
 for (const level of LEVELS) {

@@ -112,6 +112,19 @@
       .hint { color: var(--muted); font-size: 14px; margin-top: 14px; }
       #finish .card { text-align: center; pointer-events: none; }
       #finish { background: rgba(15, 26, 43, 0.25); pointer-events: none; }
+      #tutorial {
+        position: absolute; left: 50%; bottom: 64px; transform: translateX(-50%);
+        width: min(560px, calc(100vw - 32px)); padding: 14px 18px; border-radius: 12px;
+        background: var(--panel); border: 1px solid rgba(255, 255, 255, 0.16); text-align: center;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3); font-size: 17px; line-height: 1.45;
+      }
+      #tutorial.pop { animation: pop 0.35s ease-out; }
+      @keyframes pop { from { transform: translateX(-50%) scale(0.92); opacity: 0.4; } to { transform: translateX(-50%) scale(1); opacity: 1; } }
+      #tut-step { font-size: 12px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--accent); font-weight: 800; margin-bottom: 4px; }
+      .t-orange { color: var(--accent); } .t-cyan { color: var(--cyan); } .t-gold { color: var(--gold); }
+      .btn.highlight { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; animation: glow 1.6s ease-in-out infinite; }
+      @keyframes glow { 50% { background: rgba(255, 138, 61, 0.22); } }
+      .new-hint { margin: 10px 0 0; font-size: 13px; color: var(--accent); text-align: center; }
       .footer { margin-top: 16px; font-size: 12px; color: var(--muted); }
       .hud-right { position: absolute; top: 18px; right: 22px; text-align: right; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.45); }
       #level-label { font-size: 15px; font-weight: 700; }
@@ -157,6 +170,7 @@
       <div class="hud-right"><div id="level-label"></div><div id="cp"></div></div>
       <div id="crosshair"></div>
       <div id="toast"></div>
+      <div id="tutorial" class="hidden"><div id="tut-step"></div><div id="tut-text"></div></div>
       <div id="speed">0<small>m/s</small></div>
     </div>
 
@@ -169,8 +183,10 @@
         <button class="btn hidden" id="restart-btn">Restart level</button>
         <div class="btn-row">
           <button class="btn" id="levels-btn">Levels</button>
+          <button class="btn" id="tutorial-btn">Tutorial</button>
           <button class="btn" id="controls-btn">Controls</button>
         </div>
+        <p class="new-hint" id="new-hint">New here? Start with the <b>Tutorial</b>.</p>
         <div class="settings">
           <label>Mouse sensitivity <input id="sens" type="range" min="0.2" max="3" step="0.05" /> <span id="sens-val"></span></label>
           <label><input id="mute" type="checkbox" /> Mute</label>

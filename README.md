@@ -31,6 +31,7 @@ The full controls list sits behind the **Controls** button on the main menu.
 - **Rope physics:** It's a rope, not a stick. It only pulls when it's stretched tight, and reeling in gives you real speed you keep when you let go.
 - **Rope length:** The rope stays the length it was when it caught (up to the 55 m hook range) until you reel in.
 - **Release hop:** Letting go gives a small jump up and forward in the direction you're facing. If you're falling, it stops the fall, so you can rescue a run that was about to drop. You only get it if you held the rope for at least 0.25 s, so you can't spam it.
+- **Tutorial:** Open it from the **Tutorial** button on the main menu, which is highlighted until you've done it once. A prompt box takes you through ten steps on a gentle hand-built course: looking, moving, aiming, hooking, swinging, letting go, reeling in, checkpoints, smooth blocks and the finish. If you do a step early it still counts, and pressing **N** at the end starts Level 1.
 - **30 levels:** Open them from the **Levels** button. Each level unlocks when you finish the one before. They get harder as you go:
   - more anchors (8 on level 1, 26 on level 30)
   - bigger gaps between anchors
@@ -53,7 +54,7 @@ The full controls list sits behind the **Controls** button on the main menu.
 - `scripts/find-seeds.mjs` picks a seed for each level that the autopilot can finish and writes them to `src/level-seeds.js`. Rerun it after changing the generator, physics or bot.
 - Physics and game rules (`src/physics.js`, `src/run.js`) contain no drawing code. They run on a fixed 120 Hz timestep, so the game plays the same at any frame rate and can be tested in Node.
 - An autopilot (`src/bot.js`) flies the levels. The tests use it to prove all 30 can be finished. Add `?bot=1` to the URL to watch it play.
-- Testing helpers: `?level=N` opens level N (if unlocked), and `?unlock=all` unlocks every level for that visit without saving.
+- Testing helpers: `?level=N` opens level N (if unlocked), `?tutorial=1` opens the tutorial, and `?unlock=all` unlocks every level for that visit without saving.
 
 | File | What it does |
 | --- | --- |
@@ -62,6 +63,7 @@ The full controls list sits behind the **Controls** button on the main menu.
 | `src/run.js` | Timer, checkpoints, finish, respawn |
 | `src/course.js` | Level generator and difficulty settings |
 | `src/levels.js` | The 30 levels: names and seeds |
+| `src/tutorial.js` | Tutorial steps and when each one is ticked off |
 | `src/render.js` | three.js scene, sky, clouds, rope |
 | `src/textures.js` | Textures drawn on a canvas |
 | `src/audio.js` | Synthesised sound effects |
