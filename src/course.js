@@ -41,7 +41,7 @@ export function generateCourse(seed = 1) {
   const checkpointAfter = new Set([5, 10]);
   let x = 0;
   let y = 22;
-  let z = -14;
+  let z = -6; // first anchor ~30-40 m from the start, within hook range
 
   for (let i = 0; i < anchorCount; i++) {
     z -= range(rand, 24, 33);

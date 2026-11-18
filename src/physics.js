@@ -5,9 +5,13 @@ export const TUNING = {
   gravity: 24,
   radius: 0.5,
   eyeHeight: 0.35, // camera offset above the player's centre
-  hookRange: 75,
+  hookRange: 55,
+  maxRope: 28, // longer ropes are pulled in to this length automatically
   reelSpeed: 17, // how fast holding right mouse shortens the rope (m/s)
   minRope: 2,
+  releaseHopUp: 6, // upward speed given when you let go of the rope (m/s)
+  releaseHopForward: 4, // push in the direction you're facing when you let go
+  releaseHopMinHold: 0.25, // must hold the rope this long to earn the hop (s)
   attachTug: 2.5, // small pull towards the anchor the moment you hook
   walkSpeed: 9,
   groundAccel: 70,
@@ -84,15 +88,26 @@ export function tryHook(player, course, dir) {
   if (!hit) return null;
   const toAnchor = hit.point.clone().sub(player.pos);
   const dist = toAnchor.length();
-  player.hook = { point: hit.point, length: Math.max(TUNING.minRope, dist), box: hit.box };
+  player.hook = { point: hit.point, length: Math.max(TUNING.minRope, dist), box: hit.box, time: 0 };
   if (dist > 0.001) player.vel.addScaledVector(toAnchor.divideScalar(dist), TUNING.attachTug);
   return hit;
 }
 
-export function releaseHook(player) {
-  const had = !!player.hook;
+// Let go of the rope. With hop, a rope held long enough gives a small jump
+// up and forward, which can save a run that was about to fall.
+// Returns { released, hopped }.
+export function releaseHook(player, { hop = false } = {}) {
+  const hook = player.hook;
   player.hook = null;
-  return had;
+  if (!hook) return { released: false, hopped: false };
+  const t = TUNING;
+  if (hop && hook.time >= t.releaseHopMinHold) {
+    player.vel.y = Math.max(player.vel.y, 0) + t.releaseHopUp;
+    player.vel.x += -Math.sin(player.yaw) * t.releaseHopForward;
+    player.vel.z += -Math.cos(player.yaw) * t.releaseHopForward;
+    return { released: true, hopped: true };
+  }
+  return { released: true, hopped: false };
 }
 
 const _fwd = new Vector3();
@@ -142,8 +157,17 @@ export function step(player, input, course, dt = FIXED_DT) {
   player.vel.y -= t.gravity * dt;
   player.vel.multiplyScalar(1 - t.drag * dt);
 
-  if (player.hook && input.reel) {
-    player.hook.length = Math.max(t.minRope, player.hook.length - t.reelSpeed * dt);
+  // Reeling: either the player holding reel, or the automatic pull-in when
+  // the rope is longer than maxRope.
+  let reeling = false;
+  if (player.hook) {
+    player.hook.time += dt;
+    const autoReel = player.hook.length > t.maxRope;
+    if (input.reel || autoReel) {
+      const floor = input.reel ? t.minRope : t.maxRope;
+      player.hook.length = Math.max(floor, player.hook.length - t.reelSpeed * dt);
+      reeling = player.hook.length > t.minRope;
+    }
   }
 
   player.pos.addScaledVector(player.vel, dt);
@@ -157,7 +181,7 @@ export function step(player, input, course, dt = FIXED_DT) {
       player.pos.copy(player.hook.point).addScaledVector(_n, player.hook.length);
       const vr = player.vel.dot(_n);
       // Reeling in gives real inward speed, so you keep the momentum.
-      const minInward = input.reel && player.hook.length > t.minRope ? -t.reelSpeed : 0;
+      const minInward = reeling ? -t.reelSpeed : 0;
       if (vr > minInward) player.vel.addScaledVector(_n, minInward - vr);
     }
   }

@@ -155,8 +155,12 @@ input.handlers.hookDown = () => {
     sound.miss();
   }
 };
+let lastRelease = null;
 input.handlers.hookUp = () => {
-  if (unhook(run)) sound.release();
+  const r = unhook(run);
+  if (r.released) lastRelease = { ...r, velY: run.player.vel.y };
+  if (r.hopped) sound.hop();
+  else if (r.released) sound.release();
 };
 input.handlers.key = (code) => {
   if (code === 'KeyR' && state !== 'menu') restart();
@@ -256,4 +260,4 @@ requestAnimationFrame(frame);
 if (botMode) startPlaying();
 
 // Handle for automated browser tests.
-window.__skyhook = { run, course, renderer, get state() { return state; }, restart, formatTime };
+window.__skyhook = { run, course, renderer, get state() { return state; }, get lastRelease() { return lastRelease; }, restart, formatTime };

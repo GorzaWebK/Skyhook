@@ -41,7 +41,7 @@ export function hook(run, dir) {
 }
 
 export function unhook(run) {
-  return releaseHook(run.player);
+  return releaseHook(run.player, { hop: !run.finished });
 }
 
 // Advance one fixed step. Returns a list of event names for sound and HUD.

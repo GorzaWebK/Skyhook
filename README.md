@@ -13,7 +13,7 @@ PC only (keyboard and mouse). Everything is made in code: the 3D world, textures
 | Input | Action |
 | --- | --- |
 | Mouse | Look and aim |
-| Left click (hold) | Fire the hook and stay attached. Let go to fling. |
+| Left click (hold) | Fire the hook and stay attached. Let go to fling (with a small hop). |
 | Right click / Shift (hold) | Reel the rope in |
 | W A S D | Steer in the air and pump your swing |
 | Space | Jump |
@@ -21,11 +21,13 @@ PC only (keyboard and mouse). Everything is made in code: the 3D world, textures
 | M | Mute |
 | Esc | Pause (back to menu) |
 
-The crosshair turns orange when you're aiming at something you can hook, and a ring marks the exact spot. Hook range is 75 m.
+The crosshair turns orange when you're aiming at something you can hook, and a ring marks the exact spot. Hook range is 55 m.
 
 ## Features
 
 - **Rope physics:** It's a rope, not a stick. It only pulls when it's stretched tight, and reeling in gives you real speed you keep when you let go.
+- **Short, punchy ropes:** The rope is capped at 28 m. Hook something further away and it pulls you in to 28 m automatically.
+- **Release hop:** Letting go gives a small jump up and forward in the direction you're facing. If you're falling, it stops the fall, so you can rescue a run that was about to drop. You only get it if you held the rope for at least 0.25 s, so you can't spam it.
 - **Course "First Flight":** 16 anchors, 2 checkpoints and a finish. Checkpoints and the finish are tall columns of light, and flying through them anywhere counts.
 - **Timer and best time:** The clock starts when you leave the start platform. Your best time and checkpoint splits are saved in the browser.
 - **Splits:** At each checkpoint you see how far ahead (green) or behind (red) your best run you are.

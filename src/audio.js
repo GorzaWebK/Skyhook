@@ -119,6 +119,12 @@ export class Sound {
     this.burst({ freq: 800, sweepTo: 300, q: 1, dur: 0.2, gain: 0.15 });
   }
 
+  // Letting go with the hop: a springy upward whoosh.
+  hop() {
+    this.burst({ freq: 500, sweepTo: 2200, q: 1.2, dur: 0.22, gain: 0.2 });
+    this.tone({ type: 'triangle', freq: 300, to: 700, dur: 0.15, gain: 0.12 });
+  }
+
   jump() {
     this.burst({ freq: 600, q: 1, dur: 0.08, gain: 0.1, type: 'lowpass' });
   }
