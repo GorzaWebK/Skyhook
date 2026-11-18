@@ -24,4 +24,7 @@ export const storage = {
   setBest: (courseId, time) => set(`best.${courseId}`, time),
   getSettings: () => ({ sensitivity: 1, muted: false, ...get('settings', {}) }),
   setSettings: (s) => set('settings', s),
+  // unlocked: how many levels are open (level 1 always is); last: last level played
+  getProgress: () => ({ unlocked: 1, last: 0, ...get('progress', {}) }),
+  setProgress: (p) => set('progress', p),
 };

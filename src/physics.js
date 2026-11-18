@@ -1,4 +1,5 @@
 import { Vector3 } from 'three';
+import { isHookable } from './course.js';
 
 // All the movement feel lives in these numbers.
 export const TUNING = {
@@ -84,7 +85,7 @@ export function raycast(course, origin, dir, maxDist = TUNING.hookRange) {
 
 export function tryHook(player, course, dir) {
   const hit = raycast(course, eyePosition(player), dir);
-  if (!hit) return null;
+  if (!hit || !isHookable(hit.box)) return null;
   const toAnchor = hit.point.clone().sub(player.pos);
   const dist = toAnchor.length();
   player.hook = { point: hit.point, length: Math.max(TUNING.minRope, dist), box: hit.box, time: 0 };

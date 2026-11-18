@@ -36,6 +36,18 @@ async function waitForServer() {
     await page.goto(URL);
     await page.waitForTimeout(1500);
     check(await page.isVisible('#menu'), 'title menu is shown');
+    check(!(await page.isVisible('#screen-controls')), 'controls are hidden until the Controls button is pressed');
+    await page.click('#controls-btn');
+    check(await page.isVisible('#screen-controls') && !(await page.isVisible('#screen-main')), 'Controls button opens the controls page');
+    await page.click('#screen-controls [data-back]');
+    check(await page.isVisible('#screen-main'), 'Back returns to the main menu');
+
+    await page.click('#levels-btn');
+    check(await page.isVisible('#screen-levels'), 'Levels button opens level select');
+    const tiles = await page.$$eval('.level-tile', (els) => els.map((e) => ({ locked: e.disabled, text: e.textContent })));
+    check(tiles.length === 30, `level select shows 30 levels (${tiles.length})`);
+    check(!tiles[0].locked && tiles.slice(1).every((t) => t.locked), 'only level 1 is unlocked at first');
+    await page.click('#screen-levels [data-back]');
 
     await page.click('#play-btn');
     await page.waitForTimeout(800);
@@ -117,7 +129,7 @@ async function waitForServer() {
     await page.waitForTimeout(500);
     check(await g(() => window.__skyhook.state === 'menu'), 'Esc (leaving pointer lock) pauses to the menu');
 
-    await g(() => localStorage.setItem('skyhook.best.course-1', JSON.stringify({ time: 42.5, splits: [10, 20] })));
+    await g(() => localStorage.setItem('skyhook.best.level-1', JSON.stringify({ time: 42.5, splits: [10, 20] })));
     await page.reload();
     await page.waitForTimeout(1500);
     check((await page.textContent('#menu-best')) === '0:42.500', 'best time survives a reload');
@@ -129,11 +141,35 @@ async function waitForServer() {
       await page.waitForTimeout(500);
       state = await g(() => window.__skyhook.state);
     }
-    const run = await g(() => ({ t: window.__skyhook.run.time, cp: window.__skyhook.run.checkpoint, falls: window.__skyhook.run.falls }));
-    check(state === 'finished' && run.cp === 1 && run.falls === 0, `autopilot finishes the course in the browser (${run.t.toFixed(3)} s)`);
+    const run = await g(() => ({ t: window.__skyhook.run.time, cp: window.__skyhook.run.checkpoint, cps: window.__skyhook.course.checkpoints.length, falls: window.__skyhook.run.falls }));
+    check(state === 'finished' && run.cp === run.cps - 1 && run.falls === 0, `autopilot finishes level 1 in the browser (${run.t.toFixed(3)} s)`);
     check((await page.textContent('#finish-note')).startsWith('New best!'), 'finish screen announces a new best');
+    check(await g(() => JSON.parse(localStorage.getItem('skyhook.progress')).unlocked === 2), 'finishing level 1 unlocks level 2');
     await page.waitForTimeout(3000);
     check(await g(() => window.__skyhook.run.player.vel.length() < 5), 'player settles into a hover after finishing');
+    await page.keyboard.press('KeyN');
+    await page.waitForTimeout(500);
+    check(await g(() => window.__skyhook.level.number === 2 && window.__skyhook.state === 'playing'), 'N goes to the next level');
+    await page.screenshot({ path: 'test-results/level-2.png' });
+
+    // Level select reflects progress; a later level can be started from it.
+    await page.goto(URL);
+    await page.waitForTimeout(1000);
+    await page.click('#levels-btn');
+    const t2 = await page.$$eval('.level-tile', (els) => els.map((e) => e.disabled));
+    check(!t2[0] && !t2[1] && t2[2], 'level select shows levels 1-2 open, 3 locked');
+    await page.screenshot({ path: 'test-results/level-select.png' });
+    await page.click('.level-tile[data-level="1"]');
+    await page.waitForTimeout(800);
+    check(await g(() => window.__skyhook.level.number === 2 && window.__skyhook.state === 'playing'), 'clicking a level tile starts that level');
+
+    // Late levels render with smooth blocks and no errors.
+    await page.goto(`${URL}?unlock=all&level=30`);
+    await page.waitForTimeout(1500);
+    check(await g(() => window.__skyhook.level.number === 30), '?unlock=all&level=30 opens level 30');
+    await page.click('#play-btn');
+    await page.waitForTimeout(1500);
+    await page.screenshot({ path: 'test-results/level-30.png' });
 
     check(errors.length === 0, `no console errors${errors.length ? `: ${errors.join(' | ')}` : ''}`);
   } finally {

@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Vector3 } from 'three';
-import { generateCourse, COURSES } from '../src/course.js';
+import { generateLevel, levelParams, isHookable } from '../src/course.js';
+import { LEVELS, buildLevel } from '../src/levels.js';
 import { createPlayer, step, tryHook, releaseHook, raycast, aimDirection, TUNING, FIXED_DT } from '../src/physics.js';
 import { createRun, tick } from '../src/run.js';
 import { createBot, botInput } from '../src/bot.js';
@@ -9,16 +10,16 @@ import { createBot, botInput } from '../src/bot.js';
 const idle = { forward: 0, right: 0, jump: false, reel: false };
 
 test('course generation is deterministic for a seed', () => {
-  const a = generateCourse(1);
-  const b = generateCourse(1);
-  const c = generateCourse(2);
+  const a = generateLevel(5, 1);
+  const b = generateLevel(5, 1);
+  const c = generateLevel(5, 2);
   assert.equal(a.boxes.length, b.boxes.length);
   assert.deepEqual(a.anchors.map((x) => x.center.toArray()), b.anchors.map((x) => x.center.toArray()));
   assert.notDeepEqual(a.anchors.map((x) => x.center.toArray()), c.anchors.map((x) => x.center.toArray()));
 });
 
 test('player stands on the start platform', () => {
-  const course = generateCourse(1);
+  const course = buildLevel(LEVELS[0]);
   const p = createPlayer(course.spawn);
   for (let i = 0; i < 240; i++) step(p, idle, course);
   assert.ok(p.grounded, 'should be grounded');
@@ -26,7 +27,7 @@ test('player stands on the start platform', () => {
 });
 
 test('player can walk and jump', () => {
-  const course = generateCourse(1);
+  const course = buildLevel(LEVELS[0]);
   const p = createPlayer(course.spawn);
   for (let i = 0; i < 60; i++) step(p, idle, course);
   const z0 = p.pos.z;
@@ -37,10 +38,10 @@ test('player can walk and jump', () => {
 });
 
 test('rope never stretches beyond its length', () => {
-  const course = generateCourse(1);
+  const course = buildLevel(LEVELS[0]);
   const p = createPlayer(course.spawn);
-  p.pos.set(0, 20, -20);
-  p.hook = { point: new Vector3(0, 30, -30), length: 12 };
+  p.pos.set(0, 20, -3000); // far away from any geometry
+  p.hook = { point: new Vector3(0, 30, -3010), length: 12 };
   p.vel.set(15, 0, 0);
   let maxDist = 0;
   for (let i = 0; i < 600; i++) {
@@ -51,7 +52,7 @@ test('rope never stretches beyond its length', () => {
 });
 
 test('reeling in shortens the rope and pulls the player in', () => {
-  const course = generateCourse(1);
+  const course = buildLevel(LEVELS[0]);
   const p = createPlayer(course.spawn);
   p.pos.set(0, 10, -40);
   p.hook = { point: new Vector3(0, 30, -40), length: 20 };
@@ -61,7 +62,7 @@ test('reeling in shortens the rope and pulls the player in', () => {
 });
 
 test('the rope keeps the length it had when it caught', () => {
-  const course = generateCourse(1);
+  const course = buildLevel(LEVELS[0]);
   const p = createPlayer(course.spawn);
   p.pos.set(0, -10, -100);
   p.hook = { point: new Vector3(0, 30, -100), length: 40, time: 0 };
@@ -70,7 +71,7 @@ test('the rope keeps the length it had when it caught', () => {
 });
 
 test('hook range is limited', () => {
-  const course = generateCourse(1);
+  const course = buildLevel(LEVELS[0]);
   const p = createPlayer(course.spawn);
   // Straight down the course: the far anchors are out of range.
   const far = course.anchors[3].center;
@@ -80,7 +81,7 @@ test('hook range is limited', () => {
 });
 
 test('letting go after holding the rope gives a hop up and forward', () => {
-  const course = generateCourse(1);
+  const course = buildLevel(LEVELS[0]);
   const p = createPlayer(course.spawn);
   p.pos.set(0, 0, -100);
   p.vel.set(0, -20, 0); // falling fast
@@ -95,7 +96,7 @@ test('letting go after holding the rope gives a hop up and forward', () => {
 });
 
 test('no hop when the rope is let go too quickly (no hook spamming)', () => {
-  const course = generateCourse(1);
+  const course = buildLevel(LEVELS[0]);
   const p = createPlayer(course.spawn);
   p.pos.set(0, 0, -100);
   p.hook = { point: new Vector3(0, 30, -100), length: 40, time: 0 };
@@ -106,7 +107,7 @@ test('no hop when the rope is let go too quickly (no hook spamming)', () => {
 });
 
 test('hook raycast hits the first anchor from the start', () => {
-  const course = generateCourse(1);
+  const course = buildLevel(LEVELS[0]);
   const p = createPlayer(course.spawn);
   const a = course.anchors[0];
   const eye = p.pos.clone().add(new Vector3(0, TUNING.eyeHeight, 0));
@@ -119,14 +120,14 @@ test('hook raycast hits the first anchor from the start', () => {
 });
 
 test('hook misses when aiming at empty sky', () => {
-  const course = generateCourse(1);
+  const course = buildLevel(LEVELS[0]);
   const p = createPlayer(course.spawn);
   assert.equal(tryHook(p, course, aimDirection(Math.PI, 1.2)), null);
   assert.equal(p.hook, null);
 });
 
 test('falling into the clouds respawns the player', () => {
-  const course = generateCourse(1);
+  const course = buildLevel(LEVELS[0]);
   const run = createRun(course);
   run.player.pos.set(0, -40, -60);
   let fell = false;
@@ -138,9 +139,34 @@ test('falling into the clouds respawns the player', () => {
   assert.ok(run.player.pos.distanceTo(course.spawn.pos) < 0.01);
 });
 
-for (const c of COURSES) {
-  test(`autopilot bot finishes ${c.id} without falling`, () => {
-    const course = generateCourse(c.seed);
+test('there are 30 levels and they get harder', () => {
+  assert.equal(LEVELS.length, 30);
+  const first = levelParams(0);
+  const last = levelParams(1);
+  assert.ok(last.anchorCount > first.anchorCount, 'more anchors');
+  assert.ok(last.gapMin > first.gapMin, 'bigger gaps');
+  assert.ok(last.sizeMax < first.sizeMin, 'smaller anchors');
+  assert.equal(first.blockerChance, 0, 'no blockers early');
+  const anchors = LEVELS.map((l) => buildLevel(l).anchors.length);
+  for (let i = 1; i < anchors.length; i++) assert.ok(anchors[i] >= anchors[i - 1], `level ${i + 1} not shorter than level ${i}`);
+  const blockers = buildLevel(LEVELS[29]).boxes.filter((b) => b.kind === 'blocker').length;
+  assert.ok(blockers > 5, `level 30 has smooth blocks (${blockers})`);
+});
+
+test('smooth blocks cannot be hooked', () => {
+  const course = buildLevel(LEVELS[29]);
+  const blocker = course.boxes.find((b) => b.kind === 'blocker');
+  assert.equal(isHookable(blocker), false);
+  const p = createPlayer(course.spawn);
+  p.pos.copy(blocker.center).add(new Vector3(0, 0, 10));
+  const dir = blocker.center.clone().sub(p.pos.clone().add(new Vector3(0, TUNING.eyeHeight, 0))).normalize();
+  assert.equal(tryHook(p, course, dir), null);
+  assert.equal(p.hook, null);
+});
+
+for (const level of LEVELS) {
+  test(`autopilot finishes level ${level.number} (${level.name}) without falling`, () => {
+    const course = buildLevel(level);
     const run = createRun(course);
     const bot = createBot(run);
     const checkpoints = [];
@@ -154,6 +180,5 @@ for (const c of COURSES) {
     assert.ok(finish, `did not finish; got to z=${run.player.pos.z.toFixed(1)}, target anchor ${bot.target}/${course.anchors.length}, falls ${run.falls}`);
     assert.deepEqual(checkpoints, course.checkpoints.map((cp) => cp.index));
     assert.equal(run.falls, 0, 'bot fell');
-    console.log(`  ${c.id}: bot time ${finish.time.toFixed(2)}s`);
   });
 }

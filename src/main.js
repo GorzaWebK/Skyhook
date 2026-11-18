@@ -1,4 +1,5 @@
-import { generateCourse, COURSES } from './course.js';
+import { isHookable } from './course.js';
+import { LEVELS, buildLevel } from './levels.js';
 import { raycast, eyePosition, aimDirection, FIXED_DT } from './physics.js';
 import { createRun, restartRun, tick, hook, unhook } from './run.js';
 import { createBot, botInput } from './bot.js';
@@ -9,14 +10,19 @@ import { storage } from './storage.js';
 
 const params = new URLSearchParams(location.search);
 const botMode = params.has('bot');
+const unlockAll = params.get('unlock') === 'all';
 
 const $ = (id) => document.getElementById(id);
 const ui = {
   hud: $('hud'), timer: $('timer'), best: $('best'), split: $('split'), speed: $('speed'),
-  cp: $('cp'), crosshair: $('crosshair'), toast: $('toast'),
-  menu: $('menu'), playBtn: $('play-btn'), courseName: $('course-name'), menuBest: $('menu-best'),
+  cp: $('cp'), levelLabel: $('level-label'), crosshair: $('crosshair'), toast: $('toast'),
+  menu: $('menu'), screens: document.querySelectorAll('.screen'),
+  playBtn: $('play-btn'), restartBtn: $('restart-btn'), levelsBtn: $('levels-btn'), controlsBtn: $('controls-btn'),
+  courseName: $('course-name'), menuBest: $('menu-best'),
+  levelGrid: $('level-grid'), levelProgress: $('level-progress'),
   sens: $('sens'), sensVal: $('sens-val'), mute: $('mute'),
-  finish: $('finish'), finishTime: $('finish-time'), finishNote: $('finish-note'),
+  finish: $('finish'), finishTitle: $('finish-title'), finishTime: $('finish-time'),
+  finishNote: $('finish-note'), finishHint: $('finish-hint'),
 };
 
 export function formatTime(t) {
@@ -26,29 +32,57 @@ export function formatTime(t) {
   return `${m}:${s.toFixed(3).padStart(6, '0')}`;
 }
 
-const courseInfo = COURSES[0];
-const course = generateCourse(courseInfo.seed);
-const run = createRun(course);
-const bot = botMode ? createBot(run) : null;
-
 const canvas = $('game');
 const renderer = new Renderer(canvas);
-renderer.buildCourse(course);
-
 const settings = storage.getSettings();
 const sound = new Sound(settings.muted);
 const input = new Input(canvas);
+const progress = storage.getProgress();
+
+// --- Level state --------------------------------------------------------------
+
+let level = null; // entry from LEVELS
+let course = null;
+let run = null;
+let bot = null;
+let best = null; // { time, splits } or null
+let splits = [];
 
 // 'menu' | 'playing' | 'finished'
 let state = 'menu';
-let splits = [];
-let best = storage.getBest(courseInfo.id); // { time, splits } or null
 let toastTimer = 0;
 let splitTimer = 0;
+let lastRelease = null;
+
+function unlockedCount() {
+  return unlockAll ? LEVELS.length : Math.max(1, Math.min(LEVELS.length, progress.unlocked));
+}
+
+function isUnlocked(index) {
+  return index < unlockedCount();
+}
+
+function loadLevel(index) {
+  level = LEVELS[index];
+  course = buildLevel(level);
+  run = createRun(course);
+  bot = botMode ? createBot(run) : null;
+  best = storage.getBest(level.id);
+  splits = [];
+  renderer.buildCourse(course);
+  progress.last = index;
+  storage.setProgress(progress);
+  ui.finish.classList.add('hidden');
+  ui.split.className = '';
+  ui.levelLabel.textContent = `Level ${level.number} · ${level.name}`;
+  refreshBest();
+  updateCheckpointLabel();
+}
 
 function refreshBest() {
   ui.best.textContent = best ? `Best ${formatTime(best.time)}` : 'No best time yet';
   ui.menuBest.textContent = best ? formatTime(best.time) : '--';
+  ui.courseName.textContent = `Level ${level.number}: ${level.name}`;
 }
 
 function showToast(text, color) {
@@ -65,7 +99,8 @@ function showSplit(delta) {
 }
 
 function updateCheckpointLabel() {
-  ui.cp.textContent = `Checkpoint ${run.checkpoint + 1} / ${course.checkpoints.length}`;
+  const n = course.checkpoints.length;
+  ui.cp.textContent = n ? `Checkpoint ${run.checkpoint + 1} / ${n}` : '';
 }
 
 function restart() {
@@ -79,11 +114,81 @@ function restart() {
   if (state === 'finished') state = 'playing';
 }
 
+// --- Menu screens -------------------------------------------------------------
+
+function showScreen(name) {
+  for (const s of ui.screens) s.classList.toggle('hidden', s.id !== `screen-${name}`);
+  if (name === 'levels') buildLevelGrid();
+  if (name === 'main') refreshMainScreen();
+}
+
+function refreshMainScreen() {
+  const inProgress = run.started && !run.finished;
+  ui.playBtn.textContent = inProgress ? 'RESUME' : 'PLAY';
+  ui.restartBtn.classList.toggle('hidden', !inProgress);
+  refreshBest();
+}
+
+function buildLevelGrid() {
+  const done = LEVELS.filter((l) => storage.getBest(l.id)).length;
+  ui.levelProgress.textContent = `${done} / ${LEVELS.length} complete`;
+  ui.levelGrid.innerHTML = '';
+  for (const l of LEVELS) {
+    const unlocked = isUnlocked(l.index);
+    const b = storage.getBest(l.id);
+    const tile = document.createElement('button');
+    tile.className = `level-tile${unlocked ? '' : ' locked'}${b ? ' done' : ''}${l.index === level.index ? ' current' : ''}`;
+    tile.disabled = !unlocked;
+    tile.dataset.level = String(l.index);
+    tile.innerHTML = `
+      <span class="lt-num">${l.number}</span>
+      <span class="lt-name">${l.name}</span>
+      <span class="lt-best">${unlocked ? (b ? formatTime(b.time) : 'Not finished') : 'Locked'}</span>`;
+    tile.addEventListener('click', () => {
+      if (!isUnlocked(l.index)) return;
+      loadLevel(l.index);
+      startPlaying();
+    });
+    ui.levelGrid.appendChild(tile);
+  }
+}
+
 function setState(next) {
   state = next;
   ui.menu.classList.toggle('hidden', state !== 'menu');
   ui.hud.classList.toggle('hidden', state === 'menu');
   if (state !== 'finished') ui.finish.classList.add('hidden');
+  if (state === 'menu') showScreen('main');
+}
+
+// --- Game events --------------------------------------------------------------
+
+function finishLevel(e) {
+  sound.finish();
+  const isRecord = !best || e.time < best.time;
+  ui.finishTitle.textContent = `Level ${level.number} complete!`;
+  ui.finishTime.textContent = formatTime(e.time);
+  if (isRecord) {
+    ui.finishNote.textContent = best ? `New best! ${(best.time - e.time).toFixed(3)}s faster` : 'First finish! That is your best time to beat.';
+    ui.finishNote.className = 'record';
+    best = { time: e.time, splits: [...splits] };
+    storage.setBest(level.id, best);
+    refreshBest();
+    sound.record();
+  } else {
+    ui.finishNote.textContent = `Best: ${formatTime(best.time)} (+${(e.time - best.time).toFixed(3)}s)`;
+    ui.finishNote.className = '';
+  }
+  const hasNext = level.index + 1 < LEVELS.length;
+  if (hasNext && progress.unlocked < level.index + 2) {
+    progress.unlocked = level.index + 2;
+    storage.setProgress(progress);
+  }
+  ui.finishHint.innerHTML = hasNext
+    ? '<kbd>N</kbd> next level · <kbd>R</kbd> fly again · <kbd>Esc</kbd> menu'
+    : 'You beat every level! · <kbd>R</kbd> fly again · <kbd>Esc</kbd> menu';
+  state = 'finished';
+  ui.finish.classList.remove('hidden');
 }
 
 function handleEvents(events) {
@@ -102,26 +207,9 @@ function handleEvents(events) {
         if (bestSplit != null) showSplit(run.time - bestSplit);
         break;
       }
-      case 'finish': {
-        sound.finish();
-        const isRecord = !best || e.time < best.time;
-        ui.finishTime.textContent = formatTime(e.time);
-        if (isRecord) {
-          ui.finishNote.textContent = best ? `New best! ${(best.time - e.time).toFixed(3)}s faster` : 'First finish! That is your best time to beat.';
-          ui.finishNote.className = 'record';
-          best = { time: e.time, splits: [...splits] };
-          storage.setBest(courseInfo.id, best);
-          refreshBest();
-          sound.record();
-        } else {
-          ui.finishNote.textContent = `Best: ${formatTime(best.time)} (+${(e.time - best.time).toFixed(3)}s)`;
-          ui.finishNote.className = '';
-        }
-        if (best?.splits && !isRecord) showSplit(e.time - best.time);
-        state = 'finished';
-        ui.finish.classList.remove('hidden');
+      case 'finish':
+        finishLevel(e);
         break;
-      }
       case 'fall':
         sound.fall();
         renderer.addShake(0.4);
@@ -139,7 +227,7 @@ function handleEvents(events) {
   }
 }
 
-// --- Input wiring -----------------------------------------------------------
+// --- Input wiring -------------------------------------------------------------
 
 function currentAim() {
   return aimDirection(run.player.yaw, run.player.pitch);
@@ -155,7 +243,6 @@ input.handlers.hookDown = () => {
     sound.miss();
   }
 };
-let lastRelease = null;
 input.handlers.hookUp = () => {
   const r = unhook(run);
   if (r.released) lastRelease = { ...r, velY: run.player.vel.y };
@@ -164,6 +251,10 @@ input.handlers.hookUp = () => {
 };
 input.handlers.key = (code) => {
   if (code === 'KeyR' && state !== 'menu') restart();
+  if ((code === 'KeyN' || code === 'Enter') && state === 'finished' && level.index + 1 < LEVELS.length) {
+    loadLevel(level.index + 1);
+    state = 'playing';
+  }
   if (code === 'KeyM') {
     settings.muted = !settings.muted;
     ui.mute.checked = settings.muted;
@@ -191,10 +282,15 @@ function startPlaying() {
   }
   input.requestLock();
 }
+
 ui.playBtn.addEventListener('click', startPlaying);
-canvas.addEventListener('click', () => {
-  if (state === 'menu') startPlaying();
+ui.restartBtn.addEventListener('click', () => {
+  restart();
+  startPlaying();
 });
+ui.levelsBtn.addEventListener('click', () => showScreen('levels'));
+ui.controlsBtn.addEventListener('click', () => showScreen('controls'));
+for (const b of document.querySelectorAll('[data-back]')) b.addEventListener('click', () => showScreen('main'));
 
 ui.sens.value = settings.sensitivity;
 ui.sensVal.textContent = `${Number(settings.sensitivity).toFixed(2)}x`;
@@ -210,11 +306,14 @@ ui.mute.addEventListener('change', () => {
   storage.setSettings(settings);
 });
 
-// --- Main loop --------------------------------------------------------------
+// --- Main loop ----------------------------------------------------------------
 
-ui.courseName.textContent = `Course: ${courseInfo.name}`;
-refreshBest();
-updateCheckpointLabel();
+const requested = Number(params.get('level')) - 1;
+const startIndex = Number.isInteger(requested) && requested >= 0 && requested < LEVELS.length && isUnlocked(requested)
+  ? requested
+  : isUnlocked(progress.last) ? progress.last : 0;
+loadLevel(startIndex);
+showScreen('main');
 
 let last = performance.now();
 let accumulator = 0;
@@ -242,7 +341,7 @@ function frame(now) {
 
   // What would the hook grab right now?
   const target = state === 'menu' ? null : raycast(course, eyePosition(p), currentAim());
-  ui.crosshair.className = p.hook ? 'hooked' : target ? 'in-range' : '';
+  ui.crosshair.className = p.hook ? 'hooked' : target && isHookable(target.box) ? 'in-range' : target ? 'blocked' : '';
 
   ui.timer.textContent = formatTime(run.time);
   const speed = p.vel.length();
@@ -252,7 +351,7 @@ function frame(now) {
   if (toastTimer > 0 && (toastTimer -= dt) <= 0) ui.toast.classList.remove('show');
   if (splitTimer > 0 && (splitTimer -= dt) <= 0) ui.split.classList.remove('show');
 
-  renderer.render(p, target, dt);
+  renderer.render(p, target && isHookable(target.box) ? target : null, dt);
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
@@ -260,4 +359,11 @@ requestAnimationFrame(frame);
 if (botMode) startPlaying();
 
 // Handle for automated browser tests.
-window.__skyhook = { run, course, renderer, get state() { return state; }, get lastRelease() { return lastRelease; }, restart, formatTime };
+window.__skyhook = {
+  get run() { return run; },
+  get course() { return course; },
+  get level() { return level; },
+  get state() { return state; },
+  get lastRelease() { return lastRelease; },
+  renderer, restart, loadLevel, formatTime,
+};

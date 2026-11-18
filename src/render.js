@@ -11,6 +11,7 @@ const KIND_STYLE = {
   checkpoint: { color: '#8fe3e8', tile: 4, emissive: '#1a5a60' },
   finish: { color: '#ffd36b', tile: 4, emissive: '#5a4210' },
   pillar: { color: '#a9b3c7', tile: 8 },
+  blocker: { color: '#3a4150', tile: 3, metal: true },
   anchor: { color: '#ff9a4d', tile: 2.5, stripes: true, emissive: '#ff5a10', emissiveIntensity: 0.45 },
 };
 
@@ -205,14 +206,15 @@ export class Renderer {
     for (const child of [...this.courseGroup.children]) {
       this.courseGroup.remove(child);
       child.geometry?.dispose();
+      child.material?.dispose();
     }
     const materials = {};
     for (const [kind, style] of Object.entries(KIND_STYLE)) {
       materials[kind] = new THREE.MeshStandardMaterial({
         color: style.color,
         map: style.stripes ? this.textures.stripes : this.textures.panel,
-        roughness: 0.85,
-        metalness: 0.05,
+        roughness: style.metal ? 0.25 : 0.85,
+        metalness: style.metal ? 0.45 : 0.05,
         emissive: style.emissive || '#000000',
         emissiveIntensity: style.emissive ? (style.emissiveIntensity ?? 0.6) : 0,
       });

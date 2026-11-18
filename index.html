@@ -49,10 +49,7 @@
         font: 700 22px/1 ui-monospace, Consolas, monospace; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
       }
       #speed small { font-size: 12px; opacity: 0.8; margin-left: 4px; }
-      #cp {
-        position: absolute; top: 18px; right: 22px; font-size: 15px; font-weight: 600;
-        text-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
-      }
+      #cp { font-size: 14px; font-weight: 600; margin-top: 4px; opacity: 0.9; }
       #crosshair {
         position: absolute; left: 50%; top: 50%; width: 22px; height: 22px;
         transform: translate(-50%, -50%);
@@ -116,6 +113,36 @@
       #finish .card { text-align: center; pointer-events: none; }
       #finish { background: rgba(15, 26, 43, 0.25); pointer-events: none; }
       .footer { margin-top: 16px; font-size: 12px; color: var(--muted); }
+      .hud-right { position: absolute; top: 18px; right: 22px; text-align: right; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.45); }
+      #level-label { font-size: 15px; font-weight: 700; }
+      #crosshair.blocked::before, #crosshair.blocked::after { background: #ff5a5a; }
+      .hidden { display: none !important; }
+      .btn {
+        display: block; width: 100%; padding: 11px; margin: 8px 0 0; border-radius: 10px; cursor: pointer;
+        background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.18); color: var(--text);
+        font-size: 15px; font-weight: 700; letter-spacing: 0.5px;
+      }
+      .btn:hover { background: rgba(255, 255, 255, 0.16); }
+      .btn-row { display: flex; gap: 10px; }
+      .btn-row .btn { flex: 1; }
+      .card.wide { width: min(980px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow-y: auto; }
+      .levels-head { display: flex; align-items: baseline; justify-content: space-between; }
+      #level-progress { color: var(--muted); font-size: 14px; }
+      #level-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin: 8px 0 6px; }
+      .level-tile {
+        display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 10px 12px; text-align: left;
+        border-radius: 10px; cursor: pointer; color: var(--text);
+        background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.14);
+      }
+      .level-tile:hover:not(:disabled) { background: rgba(255, 138, 61, 0.18); border-color: var(--accent); }
+      .level-tile.done { border-color: rgba(125, 255, 154, 0.45); }
+      .level-tile.current { box-shadow: 0 0 0 2px var(--accent) inset; }
+      .level-tile.locked { opacity: 0.4; cursor: not-allowed; }
+      .lt-num { font: 800 22px/1 ui-monospace, Consolas, monospace; }
+      .lt-name { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+      .lt-best { font: 12px ui-monospace, Consolas, monospace; color: var(--muted); }
+      .level-tile.done .lt-best { color: #7dff9a; }
+
     </style>
   </head>
   <body>
@@ -127,42 +154,59 @@
         <div id="best"></div>
         <div id="split"></div>
       </div>
-      <div id="cp"></div>
+      <div class="hud-right"><div id="level-label"></div><div id="cp"></div></div>
       <div id="crosshair"></div>
       <div id="toast"></div>
       <div id="speed">0<small>m/s</small></div>
     </div>
 
     <div id="menu" class="overlay">
-      <div class="card">
+      <div id="screen-main" class="card screen">
         <h1>SKY<span>HOOK</span></h1>
         <p class="sub">Grapple, swing and fling yourself across the sky. Beat your best time.</p>
-        <div class="course-line"><span id="course-name">Course</span><span>Best: <b id="menu-best">--</b></span></div>
-        <button class="play" id="play-btn">CLICK TO PLAY</button>
-        <div class="controls">
-          <span><kbd>Mouse</kbd></span><span>Look and aim</span>
-          <span><kbd>Left click</kbd></span><span>Fire hook (hold to stay attached, let go to fling)</span>
-          <span><kbd>Right click</kbd> / <kbd>Shift</kbd></span><span>Reel in the rope</span>
-          <span><kbd>W A S D</kbd></span><span>Steer and pump your swing</span>
-          <span><kbd>Space</kbd></span><span>Jump</span>
-          <span><kbd>R</kbd></span><span>Restart the course</span>
-          <span><kbd>M</kbd></span><span>Mute sound</span>
-          <span><kbd>Esc</kbd></span><span>Pause</span>
+        <div class="course-line"><span id="course-name">Level</span><span>Best: <b id="menu-best">--</b></span></div>
+        <button class="play" id="play-btn">PLAY</button>
+        <button class="btn hidden" id="restart-btn">Restart level</button>
+        <div class="btn-row">
+          <button class="btn" id="levels-btn">Levels</button>
+          <button class="btn" id="controls-btn">Controls</button>
         </div>
         <div class="settings">
           <label>Mouse sensitivity <input id="sens" type="range" min="0.2" max="3" step="0.05" /> <span id="sens-val"></span></label>
           <label><input id="mute" type="checkbox" /> Mute</label>
         </div>
-        <div class="footer">Fall into the clouds and you go back to your last checkpoint.</div>
+      </div>
+
+      <div id="screen-controls" class="card screen hidden">
+        <h2>Controls</h2>
+        <div class="controls">
+          <span><kbd>Mouse</kbd></span><span>Look and aim</span>
+          <span><kbd>Left click</kbd></span><span>Fire hook (hold to stay attached, let go to fling with a small hop)</span>
+          <span><kbd>Right click</kbd> / <kbd>Shift</kbd></span><span>Reel in the rope</span>
+          <span><kbd>W A S D</kbd></span><span>Steer and pump your swing</span>
+          <span><kbd>Space</kbd></span><span>Jump</span>
+          <span><kbd>R</kbd></span><span>Restart the level</span>
+          <span><kbd>N</kbd></span><span>Next level (after finishing)</span>
+          <span><kbd>M</kbd></span><span>Mute sound</span>
+          <span><kbd>Esc</kbd></span><span>Pause</span>
+        </div>
+        <p class="hint">Orange blocks and grey pillars can be hooked. Dark smooth blocks can't. The crosshair turns orange when you're aiming at something you can grab. Fall into the clouds and you go back to your last checkpoint.</p>
+        <button class="btn" data-back>Back</button>
+      </div>
+
+      <div id="screen-levels" class="card screen wide hidden">
+        <div class="levels-head"><h2>Levels</h2><span id="level-progress"></span></div>
+        <div id="level-grid"></div>
+        <button class="btn" data-back>Back</button>
       </div>
     </div>
 
     <div id="finish" class="overlay hidden">
       <div class="card">
-        <h2>Finished!</h2>
+        <h2 id="finish-title">Finished!</h2>
         <div id="finish-time">0:00.000</div>
         <div id="finish-note"></div>
-        <div class="hint">Press <kbd>R</kbd> to fly again · <kbd>Esc</kbd> for menu</div>
+        <div class="hint" id="finish-hint"></div>
       </div>
     </div>
 
