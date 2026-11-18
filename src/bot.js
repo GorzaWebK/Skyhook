@@ -52,8 +52,14 @@ export function botInput(bot) {
   } else {
     bot.holdTime += 1 / 120;
     input.reel = p.hook.length > 16;
+    // Let go once past the anchor and heading towards the next target.
+    const next = anchors[bot.target + 1]?.center ?? run.course.finish.trigger.center;
+    const nx = next.x - p.pos.x;
+    const nz = next.z - p.pos.z;
+    const hv = Math.hypot(p.vel.x, p.vel.z);
+    const heading = hv > 1 ? (p.vel.x * nx + p.vel.z * nz) / (hv * Math.hypot(nx, nz)) : 0;
     const past = p.pos.z < a.center.z - 3;
-    if ((past && p.vel.z < -6) || bot.holdTime > 4) {
+    if ((past && p.vel.z < -6 && heading > 0.8) || bot.holdTime > 4) {
       unhook(run);
       bot.target++;
     }

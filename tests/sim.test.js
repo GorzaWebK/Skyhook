@@ -60,14 +60,13 @@ test('reeling in shortens the rope and pulls the player in', () => {
   assert.ok(p.pos.y > 18, `pulled up to ${p.pos.y}`);
 });
 
-test('a long rope is pulled in to the maximum rope length', () => {
+test('the rope keeps the length it had when it caught', () => {
   const course = generateCourse(1);
   const p = createPlayer(course.spawn);
   p.pos.set(0, -10, -100);
   p.hook = { point: new Vector3(0, 30, -100), length: 40, time: 0 };
-  for (let i = 0; i < 120; i++) step(p, idle, course);
-  assert.equal(p.hook.length, TUNING.maxRope);
-  assert.ok(p.pos.distanceTo(p.hook.point) <= TUNING.maxRope + 1e-6);
+  for (let i = 0; i < 240; i++) step(p, idle, course);
+  assert.equal(p.hook.length, 40);
 });
 
 test('hook range is limited', () => {

@@ -94,10 +94,14 @@ async function waitForServer() {
     await page.waitForTimeout(300);
     check(await g(() => window.__skyhook.run.player.hook === null), 'letting go of left click releases the hook');
     const rel = await g(() => window.__skyhook.lastRelease);
-    check(rel?.hopped && rel.velY >= 6, `letting go gives the release hop (upward speed ${rel?.velY?.toFixed(1)} m/s)`);
+    check(rel?.hopped && rel.velY >= 10, `letting go gives the release hop (upward speed ${rel?.velY?.toFixed(1)} m/s)`);
 
-    await page.waitForTimeout(6000);
-    check(await g(() => window.__skyhook.run.falls >= 1), 'falling into the clouds respawns you');
+    let fell = false;
+    for (let i = 0; i < 40 && !fell; i++) {
+      await page.waitForTimeout(500);
+      fell = await g(() => window.__skyhook.run.falls >= 1);
+    }
+    check(fell, 'falling into the clouds respawns you');
 
     await page.keyboard.press('KeyR');
     await page.waitForTimeout(400);

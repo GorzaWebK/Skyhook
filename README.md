@@ -26,7 +26,7 @@ The crosshair turns orange when you're aiming at something you can hook, and a r
 ## Features
 
 - **Rope physics:** It's a rope, not a stick. It only pulls when it's stretched tight, and reeling in gives you real speed you keep when you let go.
-- **Short, punchy ropes:** The rope is capped at 28 m. Hook something further away and it pulls you in to 28 m automatically.
+- **Rope length:** The rope stays the length it was when it caught (up to the 55 m hook range) until you reel in.
 - **Release hop:** Letting go gives a small jump up and forward in the direction you're facing. If you're falling, it stops the fall, so you can rescue a run that was about to drop. You only get it if you held the rope for at least 0.25 s, so you can't spam it.
 - **Course "First Flight":** 16 anchors, 2 checkpoints and a finish. Checkpoints and the finish are tall columns of light, and flying through them anywhere counts.
 - **Timer and best time:** The clock starts when you leave the start platform. Your best time and checkpoint splits are saved in the browser.

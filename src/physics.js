@@ -6,10 +6,9 @@ export const TUNING = {
   radius: 0.5,
   eyeHeight: 0.35, // camera offset above the player's centre
   hookRange: 55,
-  maxRope: 28, // longer ropes are pulled in to this length automatically
   reelSpeed: 17, // how fast holding right mouse shortens the rope (m/s)
   minRope: 2,
-  releaseHopUp: 6, // upward speed given when you let go of the rope (m/s)
+  releaseHopUp: 10, // upward speed given when you let go of the rope (m/s)
   releaseHopForward: 4, // push in the direction you're facing when you let go
   releaseHopMinHold: 0.25, // must hold the rope this long to earn the hop (s)
   attachTug: 2.5, // small pull towards the anchor the moment you hook
@@ -157,15 +156,12 @@ export function step(player, input, course, dt = FIXED_DT) {
   player.vel.y -= t.gravity * dt;
   player.vel.multiplyScalar(1 - t.drag * dt);
 
-  // Reeling: either the player holding reel, or the automatic pull-in when
-  // the rope is longer than maxRope.
+  // The rope keeps the length it had when it caught, unless you reel in.
   let reeling = false;
   if (player.hook) {
     player.hook.time += dt;
-    const autoReel = player.hook.length > t.maxRope;
-    if (input.reel || autoReel) {
-      const floor = input.reel ? t.minRope : t.maxRope;
-      player.hook.length = Math.max(floor, player.hook.length - t.reelSpeed * dt);
+    if (input.reel) {
+      player.hook.length = Math.max(t.minRope, player.hook.length - t.reelSpeed * dt);
       reeling = player.hook.length > t.minRope;
     }
   }
