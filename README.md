@@ -2,11 +2,11 @@
 
 A first-person grappling hook game for the browser. Fire your hook at the orange anchor blocks, swing, let go to fling yourself forward, and race to the finish against your best time.
 
-**Play:** https://gorzawebk.github.io/New-game/
+**Play:** https://gorzawebk.github.io/Skyhook/
 
 PC only (keyboard and mouse). Everything is made in code: the 3D world, textures, sky, clouds and all sound effects. There are no image or audio files.
 
-> "Skyhook" is a working title.
+> "Skyhook" is a working title. (Repo: GorzaWebK/Skyhook, formerly New-game.)
 
 ## Controls
 
