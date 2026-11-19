@@ -50,18 +50,23 @@ async function pipe(bytes, stream) {
   return new Uint8Array(await out.arrayBuffer());
 }
 
-export async function encodeLevel(data) {
-  const json = new TextEncoder().encode(JSON.stringify(validateLevel(data)));
+// Generic "TAG1." + base64url(deflate(JSON)) packing (or "TAG0." + plain
+// base64url(JSON) on browsers without CompressionStream). Used for level
+// codes (SKY) and account saves (SV).
+export async function packJson(obj, tag) {
+  const json = new TextEncoder().encode(JSON.stringify(obj));
   if (typeof CompressionStream !== 'undefined') {
-    return `SKY1.${toBase64Url(await pipe(json, new CompressionStream('deflate-raw')))}`;
+    return `${tag}1.${toBase64Url(await pipe(json, new CompressionStream('deflate-raw')))}`;
   }
-  return `SKY0.${toBase64Url(json)}`;
+  return `${tag}0.${toBase64Url(json)}`;
 }
 
-export async function decodeLevel(code) {
+// Throws Error('damaged') / a browser message if it can't be unpacked;
+// returns null if the text isn't a TAG code at all.
+export async function unpackJson(code, tag) {
   const text = String(code).trim().replace(/\s+/g, '');
-  const m = /^SKY([01])\.([A-Za-z0-9_-]+)$/.exec(text);
-  if (!m) throw new Error("That doesn't look like a Skyhook level code");
+  const m = new RegExp(`^${tag}([01])\\.([A-Za-z0-9_-]+)$`).exec(text);
+  if (!m) return null;
   let bytes;
   try {
     bytes = fromBase64Url(m[2]);
@@ -72,12 +77,20 @@ export async function decodeLevel(code) {
   } catch (e) {
     throw new Error(e.message.includes('browser') ? e.message : 'The code is damaged or incomplete');
   }
-  let data;
   try {
-    data = JSON.parse(new TextDecoder().decode(bytes));
+    return JSON.parse(new TextDecoder().decode(bytes));
   } catch {
     throw new Error('The code is damaged or incomplete');
   }
+}
+
+export async function encodeLevel(data) {
+  return packJson(validateLevel(data), 'SKY');
+}
+
+export async function decodeLevel(code) {
+  const data = await unpackJson(code, 'SKY');
+  if (data === null) throw new Error("That doesn't look like a Skyhook level code");
   return validateLevel(data);
 }
 

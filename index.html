@@ -249,6 +249,14 @@
       .ach-bar { display: block; height: 5px; border-radius: 3px; background: rgba(255,255,255,0.12); overflow: hidden; margin-top: 3px; }
       .ach-bar i { display: block; height: 100%; background: var(--accent); }
       .gun-scroll { max-height: 60vh; overflow-y: auto; padding-right: 4px; }
+      .name-row { max-width: 360px; margin: 0 auto 6px; text-align: left; }
+      .acct-intro { color: var(--text); font-size: 14px; line-height: 1.45; margin: 4px 0 8px; }
+      .acct-note { color: var(--muted); font-size: 13px; margin: 6px 0; }
+      .acct-row { display: flex; gap: 8px; align-items: center; }
+      .acct-row input { flex: 1; min-width: 0; padding: 9px 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); background: #0e1520; color: var(--text);
+        font: 600 18px ui-monospace, Menlo, Consolas, monospace; letter-spacing: 2px; text-transform: uppercase; user-select: text; }
+      .acct-row .btn { margin: 0; flex: none; width: auto; padding: 9px 16px; }
+      #profile-account { text-align: left; max-width: 560px; margin: 0 auto; }
       .gun-h { margin: 12px 0 4px; font-size: 14px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); }
       .cos-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
       .rope-swatch i { position: absolute; left: 8%; right: 8%; top: 46%; height: 4px; border-radius: 2px; transform: rotate(-12deg); }
@@ -370,12 +378,34 @@
 
       <div id="screen-profile" class="card screen wide hidden">
         <h2>Profile</h2>
+        <div class="name-row">
+          <label class="field">Your name <input id="profile-name" maxlength="16" /></label>
+          <div id="name-msg" class="msg">Letters, numbers, spaces and _ . - only. Shown on the leaderboards.</div>
+        </div>
         <div class="btn-row tabs">
           <button class="btn on" id="tab-stats">Stats</button>
           <button class="btn" id="tab-ach">Achievements</button>
+          <button class="btn" id="tab-account">Account code</button>
         </div>
         <div id="profile-stats"><div id="stats-grid"></div></div>
         <div id="profile-ach" class="hidden"><div id="ach-summary"></div><div id="ach-grid"></div></div>
+        <div id="profile-account" class="hidden">
+          <p class="acct-intro">Your account code saves your <b>best times, medals, unlocks, achievements, stats and levels</b> online. Paste it into Skyhook on any computer or browser to pick up where you left off.</p>
+          <div id="acct-offline" class="msg err hidden">Account codes need the online connection, which isn't available right now.</div>
+          <div id="acct-none" class="hidden">
+            <button class="btn" id="acct-create">Get my account code</button>
+          </div>
+          <div id="acct-have" class="hidden">
+            <h3 class="gun-h">Your account code</h3>
+            <div class="acct-row"><input id="acct-code" readonly spellcheck="false" /><button class="btn" id="acct-copy">Copy</button></div>
+            <p class="acct-note">Keep it secret, like a password: anyone with your code can use your account. Write it down somewhere safe. Your progress saves to it automatically.</p>
+          </div>
+          <div id="acct-status" class="msg"></div>
+          <h3 class="gun-h">Use a code from another computer</h3>
+          <div class="acct-row"><input id="acct-paste" placeholder="ABCD-EFGH-JKLM-NPQR" maxlength="30" spellcheck="false" autocomplete="off" /><button class="btn" id="acct-load">Load</button></div>
+          <div id="acct-msg" class="msg"></div>
+          <p class="acct-note">Anything you've already done on this computer is added to that account, so nothing is lost.</p>
+        </div>
         <button class="btn" data-back>Back</button>
       </div>
 
@@ -450,7 +480,7 @@
         <div id="board-list"></div>
         <button class="btn" id="board-watch">Watch the world record</button>
         <label class="field">Your name on the leaderboards <input id="board-name" maxlength="16" /></label>
-        <p class="hint">Letters, numbers, spaces and _ . - only. A new name shows up next time you set a time.</p>
+        <p class="hint">Letters, numbers, spaces and _ . - only. You can also change it in your Profile.</p>
         <button class="btn" data-back>Back</button>
       </div>
 

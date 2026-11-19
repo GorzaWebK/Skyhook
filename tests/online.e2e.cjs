@@ -73,6 +73,31 @@ async function rulesTests() {
   check(!(await ok(db.set(db.ref(A.d, `skyhook/ghosts/level-28/${B.uid}`), { time: 40, data: 'G1.x', at: db.serverTimestamp() }))), "rules: you cannot overwrite someone else's ghost");
   check(await ok(db.set(db.ref(B.d, `skyhook/scores/daily-2026-11-19/${B.uid}`), entry('Bob', 25))), 'rules: daily challenge boards accept scores');
   check(!(await ok(db.set(db.ref(B.d, `skyhook/scores/daily-tomorrow/${B.uid}`), entry('Bob', 25)))), 'rules: daily boards must be named by date');
+  // Account codes.
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const CODE = 'ABCDEFGHJKLMNPQR';
+  const acc = (pid, save = 'SV1.abc') => ({ pid, save, at: db.serverTimestamp() });
+  const accRef = (c, code = CODE) => db.ref(c.d, `skyhook/accounts/${code}`);
+  check(await ok(db.set(accRef(A), acc(A.uid))), 'rules: a player can make an account');
+  check(!(await ok(db.set(accRef(B, 'ZZZZZZZZZZZZZZZZ'), acc(A.uid)))), "rules: you can't make an account that claims someone else's times");
+  check(!(await ok(db.set(accRef(B, 'SHORT'), acc(B.uid)))), 'rules: account codes must be 16 characters');
+  check(!(await ok(db.set(accRef(B, 'YYYYYYYYYYYYYYYY'), acc(B.uid, 'not a save')))), 'rules: an account must hold a real save');
+  check(!(await ok(db.set(accRef(anon, 'XXXXXXXXXXXXXXXX'), acc('nobody')))), 'rules: you must be signed in to make an account');
+  check(!(await ok(db.get(db.ref(B.d, 'skyhook/accounts')))), 'rules: nobody can list the account codes');
+  check(await ok(db.get(accRef(B))), 'rules: with the code you can load the account');
+  check(!(await ok(db.get(db.ref(B.d, `skyhook/members/${A.uid}`)))), "rules: nobody can read which computers joined an account (it holds the code)");
+  check(!(await ok(db.set(db.ref(B.d, `skyhook/scores/level-25/${A.uid}`), entry('Bee', 30)))), "rules: without joining, you can't save times to an account");
+  check(!(await ok(db.set(db.ref(B.d, `skyhook/members/${A.uid}/${B.uid}`), 'QQQQQQQQQQQQQQQQ'))), 'rules: joining an account needs its real code');
+  check(!(await ok(db.set(db.ref(B.d, `skyhook/members/${A.uid}/${A.uid}`), CODE))), 'rules: you can only join as yourself');
+  check(await ok(db.set(db.ref(B.d, `skyhook/members/${A.uid}/${B.uid}`), CODE)), 'rules: with the code, another computer can join the account');
+  check(await ok(db.set(db.ref(B.d, `skyhook/scores/level-25/${A.uid}`), entry('Alice', 30))), '...and then save times to it');
+  await sleep(2100);
+  check(await ok(db.update(accRef(B), { save: 'SV1.def', at: db.serverTimestamp() })), "...and update the account's save");
+  check(!(await ok(db.update(accRef(B), { save: 'SV1.ghi', at: db.serverTimestamp() }))), 'rules: saves to an account are limited to one every 2 seconds');
+  await sleep(2100);
+  check(!(await ok(db.update(accRef(B), { pid: B.uid, save: 'SV1.jkl', at: db.serverTimestamp() }))), "rules: an account's id can't be changed");
+  check(!(await ok(db.remove(accRef(B)))), "rules: an account can't be deleted");
+  check(!(await ok(db.update(accRef(B), { save: 'SV1.mno', at: db.serverTimestamp(), extra: 1 }))), 'rules: accounts have no extra fields');
   const q = await db.get(db.query(db.ref(B.d, 'skyhook/scores/level-29'), db.orderByChild('time'), db.limitToFirst(10)));
   check(q.exists() && q.size === 1, 'rules: anyone can read a level leaderboard, sorted by time');
   if ((process.env.RULES_FILE || '').includes('full')) {
@@ -252,6 +277,89 @@ async function browserTests() {
     let gone = false;
     for (let i = 0; i < 40 && !gone; i++) { await p1.waitForTimeout(250); gone = (await p1.textContent('#community-msg')).includes('No levels published'); }
     check(gone, 'the owner can remove their published level');
+
+    // Account codes: player 1 carries on in another browser with their code.
+    let acct = null;
+    for (let i = 0; i < 40 && !acct; i++) { await p1.waitForTimeout(250); acct = await p1.evaluate(() => window.__skyhook.account); }
+    check(acct && /^[2-9A-HJ-NP-Z]{16}$/.test(acct.code), `an account code is made automatically once you have progress (${acct && acct.code})`);
+    await ctx1.grantPermissions(['clipboard-read', 'clipboard-write']);
+    await p1.goto(`${URL}?emulator=1`);
+    await p1.waitForTimeout(800);
+    await p1.click('#profile-btn');
+    await p1.click('#tab-account');
+    const shown = await p1.inputValue('#acct-code');
+    check(shown === acct.code.match(/.{4}/g).join('-'), `Profile > Account code shows your code (${shown})`);
+    await p1.click('#acct-copy');
+    await p1.waitForTimeout(300);
+    const copied = await p1.evaluate(() => navigator.clipboard.readText()).catch(() => '');
+    check(copied === shown && (await p1.textContent('#acct-status')).includes('Copied'), 'the Copy button copies the code');
+    await p1.screenshot({ path: 'test-results/account.png' });
+
+    const ctx4 = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+    const p4 = await ctx4.newPage();
+    p4.on('pageerror', (e) => errors.push(e.message));
+    await p4.addInitScript(() => { if (!localStorage.getItem('skyhook.settings')) localStorage.setItem('skyhook.settings', JSON.stringify({ flyover: false })); });
+    await p4.goto(`${URL}?emulator=1`);
+    await p4.waitForTimeout(800);
+    await p4.click('#profile-btn');
+    await p4.click('#tab-account');
+    check(await p4.isVisible('#acct-create') && !(await p4.evaluate(() => window.__skyhook.account)), 'a new player has no code until they make progress (or press the button)');
+    await p4.fill('#acct-paste', 'hello');
+    await p4.click('#acct-load');
+    check((await p4.textContent('#acct-msg')).includes("isn't an account code"), 'a pasted code that is not one gets a clear message');
+    await p4.fill('#acct-paste', 'ABCD-EFGH-JKLM-NPQS');
+    await p4.click('#acct-load');
+    let am = '';
+    for (let i = 0; i < 40 && !am.includes('No account'); i++) { await p4.waitForTimeout(250); am = await p4.textContent('#acct-msg'); }
+    check(am.includes('No account has that code'), 'a code with no account behind it says so');
+    await p4.fill('#acct-paste', ` ${shown.toLowerCase()} `);
+    await p4.click('#acct-load');
+    for (let i = 0; i < 40 && !am.includes('Loaded'); i++) { await p4.waitForTimeout(250); am = await p4.textContent('#acct-msg'); }
+    const got = await p4.evaluate(() => ({
+      name: JSON.parse(localStorage.getItem('skyhook.settings')).playerName,
+      best: JSON.parse(localStorage.getItem('skyhook.best.level-1') || 'null'),
+      custom: JSON.parse(localStorage.getItem('skyhook.custom') || '[]').map((l) => l.data.name),
+      unlocked: window.__skyhook.progress.unlocked,
+      account: window.__skyhook.account,
+    }));
+    check(am.includes('Loaded') && got.name === 'SkyAce' && got.best && got.best.time > 3 && got.custom.includes('Sky Steps') && got.unlocked >= 2 && got.account.pid === acct.pid,
+      `pasting the code in another browser brings your name, times, unlocks and levels (${JSON.stringify({ ...got, account: undefined, best: got.best && got.best.time })})`);
+    check(await p4.inputValue('#profile-name') === 'SkyAce' && await p4.inputValue('#acct-code') === shown, 'the profile now shows that name and code');
+    await p4.click('#tab-stats');
+    await p4.click('#screen-profile [data-back]');
+    await p4.click('#editor-btn');
+    check((await p4.textContent('#ml-list')).includes('Sky Steps'), 'your levels show up in My Levels');
+    await p4.click('#screen-mylevels [data-back]');
+
+    // Times set on the new computer go to the same leaderboard entry.
+    const boards = await p4.evaluate(async () => {
+      const o = window.__skyhook.online;
+      await o.submitScore('level-1', 'SkyAce', 99); // slower: keeps the old best
+      await o.submitScore('level-2', 'SkyAce', 50);
+      return { l1: await o.getLeaderboard('level-1', 10), l2: await o.getLeaderboard('level-2', 10) };
+    });
+    const l1 = boards.l1.rows.filter((r) => r.name === 'SkyAce');
+    check(l1.length === 1 && l1[0].you && l1[0].time === got.best.time && l1[0].uid === acct.pid, 'on another computer you are still one entry on the leaderboard (with your best time)');
+    check(boards.l2.rows.some((r) => r.uid === acct.pid && r.you), 'new times from the other computer count for your account');
+
+    // Renaming from the profile updates the leaderboards.
+    await p4.click('#profile-btn');
+    await p4.fill('#profile-name', 'Sky King!');
+    await p4.press('#profile-name', 'Tab');
+    let nm = '';
+    for (let i = 0; i < 40 && !nm.includes('updated on'); i++) { await p4.waitForTimeout(250); nm = await p4.textContent('#name-msg'); }
+    const renamed = await p4.evaluate(async () => (await window.__skyhook.online.getLeaderboard('level-1', 10)).rows.map((r) => r.name));
+    check(nm.includes('Sky King') && nm.includes('updated on') && renamed.includes('Sky King') && !renamed.includes('SkyAce'), `changing your name in the Profile renames you on the leaderboards ("${nm}")`);
+    // Player 1's first browser picks up the new name from the account.
+    let p1name = '';
+    for (let i = 0; i < 12 && p1name !== 'Sky King'; i++) {
+      await p1.waitForTimeout(1000);
+      await p1.evaluate(() => window.__skyhook.syncNow());
+      p1name = await p1.evaluate(() => JSON.parse(localStorage.getItem('skyhook.settings')).playerName);
+    }
+    check(p1name === 'Sky King', `the first computer picks up changes made on the other one (${p1name})`);
+    check(await p1.inputValue('#profile-name') === 'Sky King', '...and shows them on screen');
+    await ctx4.close();
 
     // Switched off (as in the automated tests): no Leaderboards button.
     const p3 = await (await browser.newContext()).newPage();

@@ -207,6 +207,15 @@ async function waitForServer() {
     check(await page.isVisible('#ach-grid') && (await page.$$('.ach')).length === 31 && (await page.textContent('#ach-summary')).includes('/ 31 unlocked'), 'Profile shows all 31 achievements');
     check((await page.$$('.ach.done')).length >= 1 && (await page.$$('.ach-bar')).length >= 1, 'earned achievements are highlighted and others show progress');
     await page.screenshot({ path: 'test-results/achievements.png' });
+    // Changing your name in the Profile (offline here).
+    check(await page.inputValue('#profile-name') === await g(() => JSON.parse(localStorage.getItem('skyhook.settings')).playerName), 'Profile shows your name');
+    await page.fill('#profile-name', 'New <b>Name</b>');
+    await page.press('#profile-name', 'Tab');
+    const nameNow = await g(() => JSON.parse(localStorage.getItem('skyhook.settings')).playerName);
+    check(nameNow === 'New bNameb' && (await page.textContent('#name-msg')).includes('Name changed'), `you can change your name in the Profile (${nameNow})`);
+    await page.click('#tab-account');
+    check(await page.isVisible('#acct-offline') && !(await page.isVisible('#acct-create')), 'the Account code tab explains it needs the online connection');
+    await page.click('#tab-stats');
     await page.click('#screen-profile [data-back]');
 
     await g(() => localStorage.setItem('skyhook.best.level-1', JSON.stringify({ time: 42.5, splits: [10, 20] })));

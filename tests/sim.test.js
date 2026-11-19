@@ -654,3 +654,96 @@ test('weekly tournament: the first 20 weeks are finishable and their gold times 
     assert.ok(Math.abs(r.time - WEEKLY[n][2]) < 0.002, `week ${n} par`);
   }
 });
+
+// --- Account codes -----------------------------------------------------------------
+import { newAccountCode, formatCode, parseCode, mergeSaves, encodeSave, decodeSave, cleanSave, sameSave, combineStats } from '../src/account.js';
+
+test('account codes: 16 easy-to-read characters, pasted with or without dashes', () => {
+  const codes = new Set(Array.from({ length: 500 }, () => newAccountCode()));
+  assert.equal(codes.size, 500, 'codes are unique');
+  for (const c of codes) assert.match(c, /^[2-9A-HJ-NP-Z]{16}$/);
+  const c = [...codes][0];
+  assert.match(formatCode(c), /^[2-9A-HJ-NP-Z]{4}(-[2-9A-HJ-NP-Z]{4}){3}$/);
+  assert.equal(parseCode(formatCode(c)), c);
+  assert.equal(parseCode(`  ${formatCode(c).toLowerCase()} `), c, 'lower case and spaces are fine');
+  assert.equal(parseCode(c.replace(/(.{4})/g, '$1 ')), c);
+  assert.equal(parseCode('ABCD-EFGH-JKLM-NPQ'), null, 'too short');
+  assert.equal(parseCode('ABCD-EFGH-JKLM-NPQ0'), null, 'no zeros (they look like O)');
+  assert.equal(parseCode('SKY1.abc'), null);
+});
+
+const lvl = (id, name, updated, extra = {}) => ({ id, own: true, tested: false, updated, data: { v: 1, name, theme: 'day', blocks: [['f', 0, 0, 0, 10, 2, 10]] }, ...extra });
+
+test('account saves: merging keeps the best of two computers', () => {
+  const a = {
+    profile: { name: 'Alice', skin: 'standard', at: 100 },
+    bests: { 'level-1': { time: 20, splits: [5] }, 'level-2': { time: 30, splits: [] } },
+    progress: { unlocked: 5, tutorialDone: true, dailyDone: ['2026-11-19'], trophies: { '2026-W47': 2 } },
+    achievements: { first: '2026-11-20' },
+    stats: { pc1: { playTime: 100, distance: 1000, topSpeed: 40 } },
+    custom: [lvl('c1', 'Old name', 10), lvl('c2', 'Mine', 5)],
+    deleted: {},
+  };
+  const b = {
+    profile: { name: 'Ali', skin: 'neon', at: 200 },
+    bests: { 'level-1': { time: 18, splits: [4] }, 'level-3': { time: 40, splits: [] } },
+    progress: { unlocked: 8, editorFinished: true, dailyDone: ['2026-11-18'], trophies: { '2026-W47': 1 } },
+    achievements: { first: '2026-11-19', swing: '2026-11-21' },
+    stats: { pc2: { playTime: 50, distance: 500, topSpeed: 55 } },
+    custom: [lvl('c1', 'New name', 20), lvl('c3', 'Other', 7)],
+    deleted: { c2: 6 },
+  };
+  const m = mergeSaves(a, b);
+  assert.equal(m.profile.name, 'Ali', 'the newest name wins');
+  assert.equal(m.profile.skin, 'neon');
+  assert.deepEqual(m.bests['level-1'], { time: 18, splits: [4] }, 'fastest time wins');
+  assert.equal(m.bests['level-2'].time, 30);
+  assert.equal(m.bests['level-3'].time, 40);
+  assert.equal(m.progress.unlocked, 8);
+  assert.ok(m.progress.tutorialDone && m.progress.editorFinished);
+  assert.deepEqual(m.progress.dailyDone, ['2026-11-18', '2026-11-19']);
+  assert.equal(m.progress.trophies['2026-W47'], 1, 'best trophy wins');
+  assert.equal(m.achievements.first, '2026-11-19', 'earliest unlock date');
+  assert.ok(m.achievements.swing);
+  assert.deepEqual(Object.keys(m.stats).sort(), ['pc1', 'pc2']);
+  const total = combineStats(m.stats);
+  assert.equal(total.playTime, 150, 'totals add up across computers');
+  assert.equal(total.topSpeed, 55, 'records take the highest');
+  assert.deepEqual(m.custom.map((l) => [l.id, l.data.name]), [['c1', 'New name'], ['c3', 'Other']], 'newest version of each level; deleted ones stay deleted');
+  assert.ok(sameSave(mergeSaves(m, a), m), 'merging again changes nothing');
+  assert.ok(sameSave(mergeSaves(b, a), m), 'order does not matter');
+});
+
+test('account saves: a level edited after it was deleted elsewhere comes back', () => {
+  const m = mergeSaves({ custom: [lvl('c9', 'Edited', 50)] }, { deleted: { c9: 40 } });
+  assert.equal(m.custom.length, 1);
+});
+
+test('account saves: bad data from the network is cleaned up', () => {
+  const s = cleanSave({
+    profile: { name: '<script>alert(1)</script>Bob', skin: '../x', at: 'soon' },
+    bests: { 'level-1': { time: -5 }, 'level-2': { time: 'fast' }, 'bad id!': { time: 4 }, 'level-3': { time: 12, splits: [1, 'x', 2] } },
+    progress: { unlocked: 'all', dailyDone: ['2026-11-19', 'yesterday'], trophies: { '2026-W47': 9, '2026-W48': 3 } },
+    stats: { pc: { playTime: 10, hacked: 'yes', falls: -2 } },
+    custom: [{ id: 'c1', data: { v: 1, name: 'x', blocks: 'nope' } }, lvl('c2', 'Fine', 1)],
+  });
+  assert.equal(s.profile.name, 'scriptalert1scri');
+  assert.equal(s.profile.skin, undefined);
+  assert.equal(s.profile.at, 0);
+  assert.deepEqual(Object.keys(s.bests), ['level-3']);
+  assert.deepEqual(s.bests['level-3'].splits, [1, 2]);
+  assert.equal(s.progress.unlocked, undefined);
+  assert.deepEqual(s.progress.dailyDone, ['2026-11-19']);
+  assert.deepEqual(s.progress.trophies, { '2026-W48': 3 });
+  assert.deepEqual(s.stats.pc, { playTime: 10 });
+  assert.deepEqual(s.custom.map((l) => l.id), ['c2']);
+});
+
+test('account saves: pack into an SV1. code and back', async () => {
+  const save = mergeSaves({ bests: { 'level-1': { time: 21.5, splits: [3, 9] } }, custom: [lvl('c1', 'Packed', 3)] }, {});
+  const code = await encodeSave(save);
+  assert.match(code, /^SV1\.[A-Za-z0-9_-]+$/);
+  assert.ok(sameSave(await decodeSave(code), save));
+  await assert.rejects(decodeSave('SKY1.abc'));
+  await assert.rejects(decodeSave('SV1.!!!'));
+});

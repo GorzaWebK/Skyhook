@@ -63,13 +63,80 @@ async function connect() {
   }
 }
 
+// --- Accounts -------------------------------------------------------------------
+// Your times are saved under your account id ("pid"). Without an account
+// code it's this browser's sign-in id. With a code it's the id of the
+// account, and this browser joins it (skyhook/members/<pid>/<uid> = code),
+// which the rules check before letting it save times there.
+// skyhook/accounts/<code> = { pid, save, at } holds the save itself.
+
+let account = null; // { code, pid } or null
+let joined = null; // the code this browser has joined, this session
+
+export function setAccount(a) {
+  account = a && a.code && a.pid ? { code: a.code, pid: a.pid } : null;
+}
+
+// The connection plus the id to save times under.
+async function ident() {
+  const f = await connect();
+  if (!account || account.pid === f.uid) return { ...f, pid: f.uid };
+  if (joined !== account.code) {
+    try {
+      await withTimeout(f.set(f.ref(f.db, `skyhook/members/${account.pid}/${f.uid}`), account.code), 'Joining your account');
+      joined = account.code;
+    } catch {
+      // Couldn't join (e.g. older database rules): use this browser's own id
+      // for now, so leaderboards still work.
+      return { ...f, pid: f.uid };
+    }
+  }
+  return { ...f, pid: account.pid };
+}
+
+// A new account holding `save`; its id is this browser's sign-in id, so
+// times you already set stay yours. Returns { code, pid }.
+export async function createAccount(code, save) {
+  const f = await connect();
+  await withTimeout(f.set(f.ref(f.db, `skyhook/accounts/${code}`), { pid: f.uid, save, at: f.serverTimestamp() }), 'Creating your account');
+  return { code, pid: f.uid };
+}
+
+// { pid, save } for a code, or null if there's no such account.
+export async function fetchAccount(code) {
+  const f = await connect();
+  const v = (await withTimeout(f.get(f.ref(f.db, `skyhook/accounts/${code}`)), 'Loading the account')).val();
+  return v && typeof v.pid === 'string' && typeof v.save === 'string' ? { pid: v.pid, save: v.save } : null;
+}
+
+export async function writeAccount(code, save) {
+  const f = await connect();
+  await withTimeout(f.update(f.ref(f.db, `skyhook/accounts/${code}`), { save, at: f.serverTimestamp() }), 'Saving to your account');
+}
+
+// Put your current name on every board where you have a time.
+// Returns how many entries were updated.
+export async function renameEverywhere(boardIds, name) {
+  const f = await ident();
+  const clean = cleanName(name);
+  let n = 0;
+  for (const id of boardIds) {
+    const mine = f.ref(f.db, `skyhook/scores/${id}/${f.pid}`);
+    const cur = (await withTimeout(f.get(mine), 'Loading your score')).val();
+    if (!cur || cur.name === clean) continue;
+    await withTimeout(f.set(mine, { name: clean, time: cur.time, at: f.serverTimestamp() }), 'Renaming');
+    n++;
+  }
+  return n;
+}
+
 // Submit a time. Only saved if it beats your current online best (the rules
 // also enforce this). With a ghost recording, a new best uploads it too (in
 // the same write, so the ghost always matches the score). Returns { saved, best }.
 // levelId is "level-N" for the 30 levels or "daily-YYYY-MM-DD" for a daily.
 export async function submitScore(levelId, name, time, ghost = null) {
-  const f = await connect();
-  const mine = f.ref(f.db, `skyhook/scores/${levelId}/${f.uid}`);
+  const f = await ident();
+  const mine = f.ref(f.db, `skyhook/scores/${levelId}/${f.pid}`);
   const current = (await withTimeout(f.get(mine), 'Loading your score')).val();
   if (current && current.time <= time && current.name === cleanName(name)) return { saved: false, best: current.time };
   const improved = !current || time < current.time;
@@ -79,8 +146,8 @@ export async function submitScore(levelId, name, time, ghost = null) {
   if (improved && ghost) {
     try {
       await withTimeout(f.update(f.ref(f.db, 'skyhook'), {
-        [`scores/${levelId}/${f.uid}`]: entry,
-        [`ghosts/${levelId}/${f.uid}`]: { time: bestTime, data: ghost, at: f.serverTimestamp() },
+        [`scores/${levelId}/${f.pid}`]: entry,
+        [`ghosts/${levelId}/${f.pid}`]: { time: bestTime, data: ghost, at: f.serverTimestamp() },
       }), 'Saving your score');
       saved = true;
     } catch {
@@ -96,7 +163,7 @@ export async function submitScore(levelId, name, time, ghost = null) {
 // The world record holder's ghost for a level, or null if there isn't one.
 // Returns { name, time, code, you }.
 export async function getRecordGhost(levelId) {
-  const f = await connect();
+  const f = await ident();
   const top = await withTimeout(
     f.get(f.query(f.ref(f.db, `skyhook/scores/${levelId}`), f.orderByChild('time'), f.limitToFirst(1))),
     'Loading the record'
@@ -106,24 +173,24 @@ export async function getRecordGhost(levelId) {
   if (!rec) return null;
   const g = (await withTimeout(f.get(f.ref(f.db, `skyhook/ghosts/${levelId}/${rec.uid}`)), 'Loading the record ghost')).val();
   if (!g || g.time !== rec.time || typeof g.data !== 'string') return null; // ghost from an older run
-  return { name: rec.name, time: rec.time, code: g.data, you: rec.uid === f.uid };
+  return { name: rec.name, time: rec.time, code: g.data, you: rec.uid === f.pid };
 }
 
 // Top scores for a level, fastest first, plus your rank if you're on it.
 export async function getLeaderboard(levelId, count = 10) {
-  const f = await connect();
+  const f = await ident();
   const q = f.query(f.ref(f.db, `skyhook/scores/${levelId}`), f.orderByChild('time'), f.limitToFirst(count));
   const snap = await withTimeout(f.get(q), 'Loading the leaderboard');
   const rows = [];
   snap.forEach((child) => {
     const v = child.val();
-    rows.push({ uid: child.key, name: v.name, time: v.time, you: child.key === f.uid });
+    rows.push({ uid: child.key, name: v.name, time: v.time, you: child.key === f.pid });
   });
   rows.sort((a, b) => a.time - b.time);
 
   // Your own position, even if you're not in the top `count`.
   let me = null;
-  const mineSnap = await withTimeout(f.get(f.ref(f.db, `skyhook/scores/${levelId}/${f.uid}`)), 'Loading your score');
+  const mineSnap = await withTimeout(f.get(f.ref(f.db, `skyhook/scores/${levelId}/${f.pid}`)), 'Loading your score');
   if (mineSnap.exists()) {
     const myTime = mineSnap.val().time;
     const faster = await withTimeout(
@@ -149,11 +216,11 @@ function newId() {
 
 // Publish (or update, if id is given and it's yours). Returns the level id.
 export async function publishLevel({ id = null, name, author, code, blocks }) {
-  const f = await connect();
+  const f = await ident();
   const levelId = id || newId();
   await withTimeout(f.update(f.ref(f.db, 'skyhook'), {
     [`levels/${levelId}`]: {
-      uid: f.uid, name: String(name).slice(0, 24) || 'Untitled', author: cleanName(author), code, blocks, at: f.serverTimestamp(),
+      uid: f.pid, name: String(name).slice(0, 24) || 'Untitled', author: cleanName(author), code, blocks, at: f.serverTimestamp(),
     },
     [`publishers/${f.uid}`]: f.serverTimestamp(),
   }), 'Publishing');
@@ -168,7 +235,7 @@ export async function unpublishLevel(id) {
 // The newest published levels with vote counts. Returns
 // [{ id, name, author, code, blocks, at, votes, voted, mine }], newest first.
 export async function listLevels(count = 40) {
-  const f = await connect();
+  const f = await ident();
   const snap = await withTimeout(
     f.get(f.query(f.ref(f.db, 'skyhook/levels'), f.orderByChild('at'), f.limitToLast(count))),
     'Loading community levels'
@@ -178,18 +245,18 @@ export async function listLevels(count = 40) {
   await Promise.all(levels.map(async (l) => {
     const v = await withTimeout(f.get(f.ref(f.db, `skyhook/levelVotes/${l.id}`)), 'Loading votes');
     l.votes = v.exists() ? v.size : 0;
-    l.voted = v.child(f.uid).exists();
-    l.mine = l.uid === f.uid;
+    l.voted = v.child(f.pid).exists();
+    l.mine = l.uid === f.pid;
   }));
   return levels.sort((a, b) => b.at - a.at);
 }
 
 export async function voteLevel(id, on) {
-  const f = await connect();
-  const r = f.ref(f.db, `skyhook/levelVotes/${id}/${f.uid}`);
+  const f = await ident();
+  const r = f.ref(f.db, `skyhook/levelVotes/${id}/${f.pid}`);
   await withTimeout(on ? f.set(r, true) : f.remove(r), 'Voting');
 }
 
 export async function myUid() {
-  return (await connect()).uid;
+  return (await ident()).pid;
 }

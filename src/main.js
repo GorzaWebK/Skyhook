@@ -1,7 +1,9 @@
 import { isHookable, insideBox, buildTutorialCourse, buildCustomCourse } from './course.js';
 import { Editor, TOOLS } from './editor.js';
 import { encodeLevel, decodeLevel, newLevelId } from './custom.js';
-import { onlineEnabled, submitScore, getLeaderboard, getRecordGhost, cleanName, publishLevel, unpublishLevel, listLevels, voteLevel } from './online.js';
+import { onlineEnabled, submitScore, getLeaderboard, getRecordGhost, cleanName, publishLevel, unpublishLevel, listLevels, voteLevel,
+  setAccount as setOnlineAccount, createAccount, fetchAccount, writeAccount, renameEverywhere } from './online.js';
+import { newAccountCode, formatCode, parseCode, cleanSave, mergeSaves, encodeSave, decodeSave, sameSave, combineStats } from './account.js';
 import { GhostRecorder, encodeGhost, decodeGhost, ghostAt, GHOST_RATE } from './ghost.js';
 import { updateMovers } from './course.js';
 import * as THREE from 'three';
@@ -20,7 +22,7 @@ import { Renderer } from './render.js';
 import { Sound } from './audio.js';
 import { Music } from './music.js';
 import { Input } from './input.js';
-import { storage } from './storage.js';
+import { storage, onStorageChange } from './storage.js';
 import { SKINS, getSkin, isSkinUnlocked, skinRequirement, achievementName } from './skins.js';
 import { ROPES, TRAILS, getRope, getTrail, isCosmeticUnlocked } from './cosmetics.js';
 import { applySkin } from './viewmodel.js';
@@ -57,7 +59,10 @@ const ui = {
   shake: $('shake'), speedfx: $('speedfx'), settingsBtn: $('settings-btn'), ghostMode: $('ghost-mode'),
   achPopup: $('ach-popup'), achGrid: $('ach-grid'), achSummary: $('ach-summary'),
   profileBtn: $('profile-btn'), statsGrid: $('stats-grid'), tabStats: $('tab-stats'), tabAch: $('tab-ach'),
-  profileStats: $('profile-stats'), profileAch: $('profile-ach'),
+  profileStats: $('profile-stats'), profileAch: $('profile-ach'), tabAccount: $('tab-account'), profileAccount: $('profile-account'),
+  profileName: $('profile-name'), nameMsg: $('name-msg'), acctOffline: $('acct-offline'), acctNone: $('acct-none'), acctHave: $('acct-have'),
+  acctCreate: $('acct-create'), acctCode: $('acct-code'), acctCopy: $('acct-copy'), acctStatus: $('acct-status'),
+  acctPaste: $('acct-paste'), acctLoad: $('acct-load'), acctMsg: $('acct-msg'),
   flyoverHint: $('flyover-hint'), flyoverSetting: $('flyover-setting'),
   watchBtn: $('watch-btn'), boardWatch: $('board-watch'), replayBar: $('replay-bar'),
   quality: $('quality'), showFps: $('show-fps'), fps: $('fps'), phoneNotice: $('phone-notice'), phoneContinue: $('phone-continue'),
@@ -174,6 +179,7 @@ function buildCosmeticGrid(grid, items, current, equip, swatch) {
     card.addEventListener('click', () => {
       if (!isCosmeticUnlocked(item, storage.getAchievements())) return;
       equip(item.id);
+      profileChanged();
       buildGunPage();
     });
     grid.appendChild(card);
@@ -223,6 +229,7 @@ function buildSkinGrid() {
     card.addEventListener('click', () => {
       if (!isSkinUnlocked(sk, skinStats())) return;
       equipSkin(sk.id);
+      profileChanged();
       buildGunPage();
     });
     ui.skinGrid.appendChild(card);
@@ -391,6 +398,7 @@ function customDef(lvl) {
 
 function saveCustom(lvl) {
   if (lvl.community) return; // community levels you play aren't added to My Levels
+  lvl.updated = Date.now();
   const list = storage.getCustomLevels().filter((l) => l.id !== lvl.id);
   list.unshift(lvl);
   storage.setCustomLevels(list);
@@ -527,6 +535,7 @@ function buildMyLevels() {
       if (act === 'delete') {
         if (e.target.dataset.confirm) {
           storage.setCustomLevels(storage.getCustomLevels().filter((l) => l.id !== lvl.id));
+          storage.setDeleted({ ...storage.getDeleted(), [lvl.id]: Date.now() });
           buildMyLevels();
         } else {
           e.target.dataset.confirm = '1';
@@ -848,11 +857,14 @@ async function submitAndShow(l, time, ghostPromise = null) {
 function showProfileTab(tab) {
   ui.tabStats.classList.toggle('on', tab === 'stats');
   ui.tabAch.classList.toggle('on', tab === 'achievements');
+  ui.tabAccount.classList.toggle('on', tab === 'account');
   ui.profileStats.classList.toggle('hidden', tab !== 'stats');
   ui.profileAch.classList.toggle('hidden', tab !== 'achievements');
+  ui.profileAccount.classList.toggle('hidden', tab !== 'account');
+  if (tab === 'account') showAccountTab();
   if (tab === 'stats') {
     saveStats();
-    ui.statsGrid.innerHTML = statsRows(stats.s, medalCounts())
+    ui.statsGrid.innerHTML = statsRows(allStats(), medalCounts())
       .map(([label, value]) => `<div class="stat"><span>${label}</span><b>${value}</b></div>`).join('');
   }
   if (tab === 'achievements') buildAchievements?.();
@@ -876,7 +888,7 @@ function resetRunFacts() {
 
 function achievementContext(runDone, flags) {
   const finished = new Set(LEVELS.filter((l) => storage.getBest(l.id)).map((l) => l.id));
-  return { stats: stats.s, medals: medalCounts(), progress, finished, run: runDone, flags };
+  return { stats: allStats(), medals: medalCounts(), progress, finished, run: runDone, flags };
 }
 
 // Check for newly earned achievements. silent: award without pop-ups.
@@ -924,13 +936,232 @@ buildAchievements = () => {
   }).join('');
 };
 
+// --- Account codes ------------------------------------------------------------
+// Your save lives online under a secret code (see account.js). Changes sync
+// a few seconds after they happen; the save is merged with what's already in
+// the account, so playing on two computers never loses anything.
+
+const deviceId = storage.getDevice();
+let otherStats = storage.getOtherStats(); // stats from your account's other computers
+let account = storage.getAccount(); // { code, pid } or null
+setOnlineAccount(account);
+let syncTimer = 0;
+let syncBusy = false;
+let syncAgain = false;
+let lastSynced = 0;
+let syncError = null;
+let syncFails = 0;
+let applyingSave = false;
+
+// Lifetime stats over all your computers.
+function allStats() {
+  return combineStats({ ...otherStats, [deviceId]: stats.s });
+}
+
+function localSave() {
+  saveStats();
+  return cleanSave({
+    v: 1,
+    profile: { name: settings.playerName, skin: settings.skin, rope: settings.rope, trail: settings.trail, at: settings.profileAt || 0 },
+    bests: storage.allBests(),
+    progress: {
+      unlocked: progress.unlocked, tutorialDone: progress.tutorialDone, editorFinished: progress.editorFinished,
+      dailyDone: progress.dailyDone, trophies: progress.trophies, trophyChecked: progress.trophyChecked,
+    },
+    achievements: achieved,
+    stats: { ...otherStats, [deviceId]: stats.s },
+    custom: storage.getCustomLevels(),
+    deleted: storage.getDeleted(),
+  });
+}
+
+// Put a (merged) save into this browser and refresh what's on screen.
+function applySave(sv) {
+  applyingSave = true;
+  try {
+    if (sv.profile.name) settings.playerName = sv.profile.name;
+    for (const k of ['skin', 'rope', 'trail']) if (sv.profile[k]) settings[k] = sv.profile[k];
+    settings.profileAt = sv.profile.at;
+    storage.setSettings(settings);
+    const mine = storage.allBests();
+    for (const [id, b] of Object.entries(sv.bests)) if (!mine[id] || b.time < mine[id].time) storage.setBest(id, b);
+    Object.assign(progress, sv.progress);
+    storage.setProgress(progress);
+    Object.assign(achieved, sv.achievements);
+    storage.setAchievements(achieved);
+    const theirs = { ...sv.stats };
+    delete theirs[deviceId];
+    otherStats = theirs;
+    storage.setOtherStats(otherStats);
+    storage.setCustomLevels(sv.custom);
+    storage.setDeleted(sv.deleted);
+  } finally {
+    applyingSave = false;
+  }
+  equipSkin(unlockedSkinIds().has(settings.skin) ? settings.skin : 'standard');
+  equipRope(isCosmeticUnlocked(getRope(settings.rope), achieved) ? settings.rope : 'black');
+  equipTrail(isCosmeticUnlocked(getTrail(settings.trail), achieved) ? settings.trail : 'none');
+  if (level && state !== 'editor') {
+    const b = storage.getBest(level.id);
+    if (b && (!best || b.time < best.time)) best = b;
+    refreshBest();
+  }
+  ui.boardName.value = settings.playerName;
+  if (document.activeElement !== ui.profileName) ui.profileName.value = settings.playerName;
+  if (state === 'menu') {
+    const visible = [...ui.screens].find((x) => !x.classList.contains('hidden'))?.id;
+    if (visible === 'screen-main') refreshMainScreen();
+    if (visible === 'screen-mylevels') buildMyLevels();
+    if (visible === 'screen-levels') buildLevelGrid();
+    if (visible === 'screen-profile' && !ui.profileStats.classList.contains('hidden')) showProfileTab('stats');
+  }
+}
+
+// Only make an account once there's something worth keeping.
+function worthSaving() {
+  return Object.keys(storage.allBests()).length > 0 || storage.getCustomLevels().length > 0 || (settings.profileAt || 0) > 0;
+}
+
+function queueSync(delay = 3000) {
+  if (!onlineEnabled) return;
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(() => syncNow({ create: worthSaving() }), delay);
+}
+
+// Anything worth keeping that gets saved also goes to your account (and
+// makes one the first time you finish something).
+onStorageChange((key) => {
+  if (applyingSave) return;
+  if (/^(best\.|progress$|achievements$|custom$|deleted$)/.test(key)) queueSync();
+});
+
+function setSyncStatus(text, cls = 'msg') {
+  ui.acctStatus.className = cls;
+  ui.acctStatus.textContent = text;
+}
+
+async function syncNow({ create = false } = {}) {
+  if (!onlineEnabled) return;
+  if (syncBusy) {
+    syncAgain = true;
+    return;
+  }
+  clearTimeout(syncTimer);
+  syncBusy = true;
+  try {
+    const local = localSave();
+    if (!account) {
+      if (!create) return;
+      account = await createAccount(newAccountCode(), await encodeSave(local));
+      storage.setAccount(account);
+      setOnlineAccount(account);
+    } else {
+      const remote = await fetchAccount(account.code);
+      if (!remote) throw new Error('your account could not be found');
+      const theirs = await decodeSave(remote.save);
+      const merged = mergeSaves(local, theirs);
+      if (!sameSave(merged, local)) applySave(merged);
+      if (!sameSave(merged, theirs)) await writeAccount(account.code, await encodeSave(merged));
+    }
+    lastSynced = Date.now();
+    syncError = null;
+    syncFails = 0;
+    setSyncStatus('Saved to your account.', 'msg good');
+  } catch (e) {
+    syncError = e.message;
+    setSyncStatus(`Couldn't save to your account right now (${e.message}). It will try again.`, 'msg err');
+    syncFails++;
+    queueSync(Math.min(600000, 15000 * 2 ** syncFails)); // back off: 30 s, 1 min, 2 min ... 10 min
+  } finally {
+    syncBusy = false;
+    showAccountTab(false);
+    if (syncAgain) {
+      syncAgain = false;
+      queueSync(2500);
+    }
+  }
+}
+
+function showAccountTab(sync = true) {
+  ui.acctOffline.classList.toggle('hidden', onlineEnabled);
+  ui.acctNone.classList.toggle('hidden', !onlineEnabled || !!account);
+  ui.acctHave.classList.toggle('hidden', !onlineEnabled || !account);
+  ui.acctLoad.disabled = ui.acctCreate.disabled = !onlineEnabled;
+  if (account) ui.acctCode.value = formatCode(account.code);
+  if (sync && account && onlineEnabled && !syncBusy) syncNow(); // fetch anything new from your other computers
+}
+
+// Switch this browser to the account with this code (adding anything done
+// here to it).
+async function useAccountCode(text) {
+  const msg = (t, cls = 'msg') => { ui.acctMsg.className = cls; ui.acctMsg.textContent = t; };
+  const code = parseCode(text);
+  if (!code) return msg("That isn't an account code. It should look like ABCD-EFGH-JKLM-NPQR.", 'msg err');
+  if (account?.code === code) return msg("That's already this computer's code.", 'msg');
+  msg('Loading...');
+  try {
+    const remote = await fetchAccount(code);
+    if (!remote) return msg('No account has that code. Check it and try again.', 'msg err');
+    const theirs = await decodeSave(remote.save);
+    const merged = mergeSaves(localSave(), theirs);
+    merged.profile = { ...merged.profile, ...theirs.profile, at: Date.now() }; // the account's name and look
+    account = { code, pid: remote.pid };
+    storage.setAccount(account);
+    setOnlineAccount(account);
+    applySave(merged);
+    ui.acctPaste.value = '';
+    msg(`Loaded! Welcome back, ${settings.playerName}. Your times, unlocks and levels are here now.`, 'msg good');
+    showAccountTab(false);
+    await syncNow();
+  } catch (e) {
+    msg(`Couldn't load that account (${e.message}).`, 'msg err');
+  }
+}
+
+// Gun skin, rope or trail picked: part of your profile.
+function profileChanged() {
+  settings.profileAt = Date.now();
+  storage.setSettings(settings);
+  if (account) queueSync();
+}
+
+// The online boards you have a time on (where your name shows).
+function myBoardIds() {
+  return Object.keys(storage.allBests())
+    .map((id) => id.replace(/^custom-community-/, 'community-'))
+    .filter((id) => /^(level-|daily-|weekly-|community-)/.test(id));
+}
+
+async function setPlayerName(raw) {
+  const name = cleanName(raw);
+  ui.boardName.value = ui.profileName.value = name;
+  if (name === settings.playerName) return;
+  settings.playerName = name;
+  profileChanged();
+  if (!account) queueSync(); // a name is worth an account
+  ui.nameMsg.className = 'msg good';
+  ui.nameMsg.textContent = `Name changed to ${name}.`;
+  if (!onlineEnabled) return;
+  try {
+    const n = await renameEverywhere(myBoardIds(), name);
+    if (settings.playerName !== name) return; // changed again meanwhile
+    ui.nameMsg.textContent = `Name changed to ${name}${n ? ` and updated on ${n} leaderboard${n > 1 ? 's' : ''}` : ''}.`;
+  } catch (e) {
+    ui.nameMsg.className = 'msg';
+    ui.nameMsg.textContent = `Name changed to ${name}. It shows on the leaderboards next time you set a time.`;
+  }
+}
+
 // --- Menu screens -------------------------------------------------------------
 
 function showScreen(name) {
   for (const s of ui.screens) s.classList.toggle('hidden', s.id !== `screen-${name}`);
   if (name === 'levels') buildLevelGrid();
   if (name === 'skins') buildGunPage();
-  if (name === 'profile') showProfileTab('stats');
+  if (name === 'profile') {
+    ui.profileName.value = settings.playerName;
+    showProfileTab('stats');
+  }
   if (name === 'boards') {
     boardIndex = level?.weekly ? -2 : level?.daily ? -1 : level && !level.custom && !level.tutorial ? level.index : 0;
     ui.boardName.value = settings.playerName;
@@ -1442,10 +1673,29 @@ ui.boardNext.addEventListener('click', () => {
   boardIndex = boardIndex >= LEVELS.length - 1 ? -2 : boardIndex + 1;
   showBoard();
 });
-ui.boardName.addEventListener('change', () => {
-  settings.playerName = cleanName(ui.boardName.value);
-  ui.boardName.value = settings.playerName;
-  storage.setSettings(settings);
+ui.boardName.addEventListener('change', () => setPlayerName(ui.boardName.value));
+ui.profileName.addEventListener('change', () => setPlayerName(ui.profileName.value));
+ui.tabAccount.addEventListener('click', () => showProfileTab('account'));
+ui.acctCreate.addEventListener('click', () => {
+  ui.acctStatus.className = 'msg';
+  ui.acctStatus.textContent = 'Creating your code...';
+  syncNow({ create: true });
+});
+ui.acctCopy.addEventListener('click', async () => {
+  ui.acctCode.select();
+  let ok = false;
+  try {
+    await navigator.clipboard.writeText(ui.acctCode.value);
+    ok = true;
+  } catch {
+    try { ok = document.execCommand('copy'); } catch { /* ignore */ }
+  }
+  ui.acctStatus.className = ok ? 'msg good' : 'msg';
+  ui.acctStatus.textContent = ok ? 'Copied! Paste it wherever you keep it safe.' : 'Press Ctrl+C to copy the selected code.';
+});
+ui.acctLoad.addEventListener('click', () => useAccountCode(ui.acctPaste.value));
+ui.acctPaste.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') useAccountCode(ui.acctPaste.value);
 });
 ui.mlNew.addEventListener('click', () => openEditor(newCustomLevel()));
 ui.mlImportToggle.addEventListener('click', () => {
@@ -1672,6 +1922,8 @@ function frame(now) {
 }
 requestAnimationFrame(frame);
 
+if (account) queueSync(1500);
+
 if (botMode) startPlaying();
 
 // Handle for automated browser tests.
@@ -1691,6 +1943,9 @@ window.__skyhook = {
   get customLevel() { return customLevel; },
   editor, openEditor, newCustomLevel, startTest, backToEditor, encodeLevel, decodeLevel,
   online: { submitScore, getLeaderboard },
+  get account() { return account; },
+  syncNow, useAccountCode, setPlayerName, localSave,
+  get syncState() { return { busy: syncBusy, last: lastSynced, error: syncError }; },
   get music() { return music; },
   get stats() { return stats.s; },
   get replay() { return replay; },
