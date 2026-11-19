@@ -64,15 +64,49 @@ async function connect() {
 }
 
 // Submit a time. Only saved if it beats your current online best (the rules
-// also enforce this). Returns { saved, best }.
-export async function submitScore(levelId, name, time) {
+// also enforce this). With a ghost recording, a new best uploads it too (in
+// the same write, so the ghost always matches the score). Returns { saved, best }.
+// levelId is "level-N" for the 30 levels or "daily-YYYY-MM-DD" for a daily.
+export async function submitScore(levelId, name, time, ghost = null) {
   const f = await connect();
   const mine = f.ref(f.db, `skyhook/scores/${levelId}/${f.uid}`);
   const current = (await withTimeout(f.get(mine), 'Loading your score')).val();
   if (current && current.time <= time && current.name === cleanName(name)) return { saved: false, best: current.time };
-  const bestTime = current ? Math.min(current.time, time) : time;
-  await withTimeout(f.set(mine, { name: cleanName(name), time: bestTime, at: f.serverTimestamp() }), 'Saving your score');
-  return { saved: !current || time < current.time, best: bestTime };
+  const improved = !current || time < current.time;
+  const bestTime = improved ? time : current.time;
+  const entry = { name: cleanName(name), time: bestTime, at: f.serverTimestamp() };
+  let saved = false;
+  if (improved && ghost) {
+    try {
+      await withTimeout(f.update(f.ref(f.db, 'skyhook'), {
+        [`scores/${levelId}/${f.uid}`]: entry,
+        [`ghosts/${levelId}/${f.uid}`]: { time: bestTime, data: ghost, at: f.serverTimestamp() },
+      }), 'Saving your score');
+      saved = true;
+    } catch {
+      // If the ghost is refused (e.g. older database rules), still save the score.
+    }
+  }
+  if (!saved) {
+    await withTimeout(f.set(mine, entry), 'Saving your score');
+  }
+  return { saved: improved, best: bestTime };
+}
+
+// The world record holder's ghost for a level, or null if there isn't one.
+// Returns { name, time, code, you }.
+export async function getRecordGhost(levelId) {
+  const f = await connect();
+  const top = await withTimeout(
+    f.get(f.query(f.ref(f.db, `skyhook/scores/${levelId}`), f.orderByChild('time'), f.limitToFirst(1))),
+    'Loading the record'
+  );
+  let rec = null;
+  top.forEach((c) => { rec = { uid: c.key, ...c.val() }; });
+  if (!rec) return null;
+  const g = (await withTimeout(f.get(f.ref(f.db, `skyhook/ghosts/${levelId}/${rec.uid}`)), 'Loading the record ghost')).val();
+  if (!g || g.time !== rec.time || typeof g.data !== 'string') return null; // ghost from an older run
+  return { name: rec.name, time: rec.time, code: g.data, you: rec.uid === f.uid };
 }
 
 // Top scores for a level, fastest first, plus your rank if you're on it.

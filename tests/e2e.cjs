@@ -206,6 +206,9 @@ async function waitForServer() {
     check((await page.textContent('#finish-note')).startsWith('New best!'), 'finish screen announces a new best');
     check((await page.textContent('#finish-medal')).includes('New Gold medal!') && await page.isVisible('#finish-medal .medal-gold.big'), 'finishing at autopilot pace awards a gold medal');
     check(await g(() => JSON.parse(localStorage.getItem('skyhook.progress')).unlocked === 2), 'finishing level 1 unlocks level 2');
+    let ghostSaved = false;
+    for (let i = 0; i < 20 && !ghostSaved; i++) { await page.waitForTimeout(100); ghostSaved = await g(() => !!localStorage.getItem('skyhook.ghost.level-1')); }
+    check(ghostSaved, 'a new best saves your ghost');
     await page.waitForTimeout(3000);
     check(await g(() => window.__skyhook.run.player.vel.length() < 5), 'player settles into a hover after finishing');
     await page.keyboard.press('KeyN');
@@ -218,6 +221,18 @@ async function waitForServer() {
     await page.waitForTimeout(1000);
     await page.click('#levels-btn');
     const t2 = await page.$$eval('.level-tile', (els) => els.map((e) => e.disabled));
+    // Your ghost races you on level 1.
+    await page.click('.level-tile[data-level="0"]');
+    await page.waitForTimeout(1200);
+    const gh = await g(() => ({ n: window.__skyhook.renderer.ghosts.length, label: window.__skyhook.renderer.ghosts[0]?.label, pos: window.__skyhook.renderer.ghosts[0]?.group.position.toArray() }));
+    await g(() => { const p = window.__skyhook.run.player; p.pos.set(0, 6, -12); });
+    await page.waitForTimeout(1500);
+    const gh2 = await g(() => window.__skyhook.renderer.ghosts[0]?.group.position.toArray());
+    check(gh.n === 1 && gh.label === 'Your best' && gh2 && Math.hypot(gh2[0] - gh.pos[0], gh2[1] - gh.pos[1], gh2[2] - gh.pos[2]) > 2, 'your best ghost appears and races you once the timer starts');
+    await page.screenshot({ path: 'test-results/ghost.png' });
+    await g(() => document.exitPointerLock());
+    await page.waitForTimeout(300);
+    await page.click('#levels-btn');
     check(!t2[0] && !t2[1] && t2[2], 'level select shows levels 1-2 open, 3 locked');
     check(await page.isVisible('.level-tile[data-level="0"] .medal-gold'), 'level select shows the gold medal on level 1');
     check((await page.textContent('#medal-totals')).replace(/\s+/g, ' ').trim().startsWith('1'), 'level select shows medal totals');

@@ -48,6 +48,17 @@ async function rulesTests() {
   check(!(await ok(db.set(db.ref(B.d, `skyhook/scores/level-99/${B.uid}`), entry('Bob', 20)))), 'rules: only real level names (level-1 to level-30)');
   check(!(await ok(db.get(db.ref(B.d, 'skyhook')))), 'rules: the whole database cannot be read in one go');
   check(await ok(db.set(refB, entry('Bob', 20))), 'rules: a valid entry on another level is fine');
+  // Ghosts must be uploaded together with a matching score.
+  const both = (d, uid, board, time, data = 'G1.abc') => db.update(db.ref(d, 'skyhook'), {
+    [`scores/${board}/${uid}`]: entry('Ghosty', time),
+    [`ghosts/${board}/${uid}`]: { time, data, at: db.serverTimestamp() },
+  });
+  check(await ok(both(B.d, B.uid, 'level-28', 40)), 'rules: a score and its ghost can be saved together');
+  check(!(await ok(db.set(db.ref(B.d, `skyhook/ghosts/level-28/${B.uid}`), { time: 12, data: 'G1.abc', at: db.serverTimestamp() }))), "rules: a ghost that doesn't match your score is rejected");
+  check(!(await ok(both(B.d, B.uid, 'level-27', 40, 'not-a-ghost'))), 'rules: ghost data must be a real recording');
+  check(!(await ok(db.set(db.ref(A.d, `skyhook/ghosts/level-28/${B.uid}`), { time: 40, data: 'G1.x', at: db.serverTimestamp() }))), "rules: you cannot overwrite someone else's ghost");
+  check(await ok(db.set(db.ref(B.d, `skyhook/scores/daily-2026-11-19/${B.uid}`), entry('Bob', 25))), 'rules: daily challenge boards accept scores');
+  check(!(await ok(db.set(db.ref(B.d, `skyhook/scores/daily-tomorrow/${B.uid}`), entry('Bob', 25)))), 'rules: daily boards must be named by date');
   const q = await db.get(db.query(db.ref(B.d, 'skyhook/scores/level-29'), db.orderByChild('time'), db.limitToFirst(10)));
   check(q.exists() && q.size === 1, 'rules: anyone can read a level leaderboard, sorted by time');
   if ((process.env.RULES_FILE || '').includes('full')) {
@@ -92,6 +103,17 @@ async function browserTests() {
     }
     check(boardText.includes('#1') && boardText.includes('SkyAce (you)'), `finishing a level saves your time online and shows your rank ("${boardText.slice(0, 60)}...")`);
     await p1.screenshot({ path: 'test-results/online-finish.png' });
+    // Player 2 races player 1's world record ghost.
+    const ctxG = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+    const pg = await ctxG.newPage();
+    pg.on('pageerror', (e) => errors.push(e.message));
+    await pg.addInitScript(() => localStorage.setItem('skyhook.settings', JSON.stringify({ playerName: 'Chaser', ghost: 'record' })));
+    await pg.goto(`${URL}?emulator=1&level=1`);
+    let rec = null;
+    for (let i = 0; i < 40 && !rec; i++) { await pg.waitForTimeout(250); rec = await pg.evaluate(() => window.__skyhook.ghosts.record && { name: window.__skyhook.ghosts.record.name, n: window.__skyhook.ghosts.record.samples.length }); }
+    check(rec && rec.name === 'SkyAce' && rec.n > 50, `another player gets the world record ghost (${rec ? `${rec.name}, ${rec.n} samples` : 'none'})`);
+    check(await pg.evaluate(() => window.__skyhook.renderer.ghosts.length === 1 && window.__skyhook.renderer.ghosts[0].label === 'WR · SkyAce'), 'the world record ghost is shown with the holder\'s name');
+    await ctxG.close();
 
     // Player 2 (different browser profile) sees it on the Leaderboards page.
     const ctx2 = await browser.newContext({ viewport: { width: 1280, height: 720 } });

@@ -1,7 +1,8 @@
 import { isHookable, insideBox, buildTutorialCourse, buildCustomCourse } from './course.js';
 import { Editor, TOOLS } from './editor.js';
 import { encodeLevel, decodeLevel, newLevelId } from './custom.js';
-import { onlineEnabled, submitScore, getLeaderboard, cleanName } from './online.js';
+import { onlineEnabled, submitScore, getLeaderboard, getRecordGhost, cleanName } from './online.js';
+import { GhostRecorder, encodeGhost, decodeGhost } from './ghost.js';
 import { THEMES } from './themes.js';
 import { TUTORIAL_STEPS, createTutorialFlags } from './tutorial.js';
 import { LEVELS, MEDALS, buildLevel, medalFor, nextMedal } from './levels.js';
@@ -41,7 +42,7 @@ const ui = {
   levelGrid: $('level-grid'), levelProgress: $('level-progress'),
   sens: $('sens'), sensVal: $('sens-val'), mute: $('mute'), musicVol: $('music-vol'), musicVal: $('music-val'),
   invert: $('invert'), fov: $('fov'), fovVal: $('fov-val'), sfxVol: $('sfx-vol'), sfxVal: $('sfx-val'),
-  shake: $('shake'), speedfx: $('speedfx'), settingsBtn: $('settings-btn'),
+  shake: $('shake'), speedfx: $('speedfx'), settingsBtn: $('settings-btn'), ghostMode: $('ghost-mode'),
   finish: $('finish'), finishTitle: $('finish-title'), finishTime: $('finish-time'),
   finishNote: $('finish-note'), finishHint: $('finish-hint'), finishMedal: $('finish-medal'),
   medalTotals: $('medal-totals'),
@@ -86,7 +87,7 @@ const renderer = new Renderer(canvas);
 const settings = storage.getSettings();
 // Defaults for settings added later (older saves don't have them).
 Object.assign(settings, {
-  invertY: false, fov: 85, sfxVolume: 1, musicVolume: 0.6, shake: true, speedFx: true,
+  invertY: false, fov: 85, sfxVolume: 1, musicVolume: 0.6, shake: true, speedFx: true, ghost: 'best',
   ...settings,
 });
 const sound = new Sound(settings.muted);
@@ -173,6 +174,63 @@ let splitTimer = 0;
 let lastRelease = null;
 let tut = null; // { flags, step } while playing the tutorial
 
+// --- Ghosts -------------------------------------------------------------------
+const recorder = new GhostRecorder();
+let myGhost = null; // samples of your best run on this level
+let recordGhost = null; // { samples, name, you } world record holder's run
+let ghostToken = 0;
+
+function refreshGhosts() {
+  const mode = settings.ghost;
+  const list = [];
+  const showRecord = (mode === 'record' || mode === 'both') && recordGhost && !recordGhost.you;
+  if (myGhost && (mode === 'best' || mode === 'both' || (mode === 'record' && !showRecord))) {
+    list.push({ samples: myGhost, color: '#5ff0ff', label: 'Your best' });
+  }
+  if (showRecord) list.push({ samples: recordGhost.samples, color: '#ffd36b', label: `WR · ${recordGhost.name}` });
+  renderer.setGhosts(state === 'editor' ? [] : list);
+}
+
+function isOnlineBoard(def) {
+  return !def.custom && !def.tutorial;
+}
+
+async function loadGhosts(def) {
+  const token = ++ghostToken;
+  myGhost = null;
+  recordGhost = null;
+  refreshGhosts();
+  const code = storage.getGhost(def.id);
+  if (code) {
+    try {
+      const samples = await decodeGhost(code);
+      if (token === ghostToken) myGhost = samples;
+    } catch { /* corrupt or old: ignore */ }
+  }
+  refreshGhosts();
+  if (onlineEnabled && isOnlineBoard(def) && settings.ghost !== 'off') {
+    try {
+      const rec = await getRecordGhost(def.id);
+      if (rec && token === ghostToken) {
+        recordGhost = { samples: await decodeGhost(rec.code), name: rec.name, you: rec.you };
+        refreshGhosts();
+      }
+    } catch { /* offline or no record: just no world record ghost */ }
+  }
+}
+
+// After a new personal best: keep the recording as your ghost.
+// Returns a promise of the encoded ghost (for uploading).
+function saveBestGhost(levelId) {
+  const samples = recorder.samples.slice();
+  if (samples.length < 2) return Promise.resolve(null);
+  myGhost = samples;
+  return encodeGhost(samples).then((code) => {
+    storage.setGhost(levelId, code);
+    return code;
+  }).catch(() => null);
+}
+
 function unlockedCount() {
   return unlockAll ? LEVELS.length : Math.max(1, Math.min(LEVELS.length, progress.unlocked));
 }
@@ -195,6 +253,8 @@ function loadDef(def) {
   splits = [];
   renderer.buildCourse(course);
   renderer.setTheme(course.theme || 'day');
+  recorder.reset();
+  loadGhosts(def);
   if (!def.tutorial && !def.custom) {
     progress.last = def.index;
     storage.setProgress(progress);
@@ -449,6 +509,7 @@ function updateCheckpointLabel() {
 
 function restart() {
   restartRun(run);
+  recorder.reset();
   ui.finishBoard.classList.add('hidden');
   if (tut) {
     tut = { flags: createTutorialFlags(), step: 0 };
@@ -496,12 +557,12 @@ async function showBoard() {
 }
 
 // After finishing an official level: save the time, then show where you are.
-async function submitAndShow(l, time) {
+async function submitAndShow(l, time, ghostPromise = null) {
   if (!onlineEnabled) return;
   ui.finishBoard.classList.remove('hidden');
   ui.finishBoard.innerHTML = '<div class="board-title">Online leaderboard</div><div class="board-empty">Saving your time...</div>';
   try {
-    await submitScore(l.id, settings.playerName, time);
+    await submitScore(l.id, settings.playerName, time, ghostPromise ? await ghostPromise : null);
     const board = await getLeaderboard(l.id, 5);
     if (level !== l) return;
     const rank = board.me ? `You're <b>#${board.me.rank}</b> in the world` : '';
@@ -583,6 +644,7 @@ function setState(next) {
   ui.hud.classList.toggle('hidden', state === 'menu');
   ui.hud.classList.toggle('editing', state === 'editor');
   renderer.showViewModel = state !== 'editor';
+  if (state === 'editor') renderer.setGhosts([]);
   if (state !== 'editor') editor.hidePreview();
   if (state !== 'finished') ui.finish.classList.add('hidden');
   if (state === 'menu') showScreen('main');
@@ -619,6 +681,7 @@ function finishCustom(e) {
     best = { time: e.time, splits: [...splits] };
     storage.setBest(level.id, best);
     refreshBest();
+    saveBestGhost(level.id);
   }
   customLevel.tested = true;
   saveCustom(customLevel);
@@ -645,6 +708,7 @@ function finishLevel(e) {
   if (level.custom) return finishCustom(e);
   sound.finish();
   const isRecord = !best || e.time < best.time;
+  let ghostSave = null;
   const skinsBefore = unlockedSkinIds();
   const oldMedal = medalFor(level, best?.time);
   const runMedal = medalFor(level, e.time);
@@ -658,6 +722,7 @@ function finishLevel(e) {
     storage.setBest(level.id, best);
     refreshBest();
     sound.record();
+    ghostSave = saveBestGhost(level.id);
   } else {
     ui.finishNote.textContent = `Best: ${formatTime(best.time)} (+${(e.time - best.time).toFixed(3)}s)`;
     ui.finishNote.className = '';
@@ -671,7 +736,7 @@ function finishLevel(e) {
     ? `<div class="fm-next">Next: ${medalBadge(next)} ${MEDAL_NAME[next]} at ${formatTime(level.medals[next])}</div>`
     : bestMedal === 'gold' ? '<div class="fm-next">You have gold on this level!</div>' : '';
   if (newMedal) sound.medal(runMedal);
-  submitAndShow(level, e.time);
+  submitAndShow(level, e.time, ghostSave);
   ui.finishMedal.innerHTML += announceNewSkins(skinsBefore);
   const hasNext = level.index + 1 < LEVELS.length;
   if (hasNext && progress.unlocked < level.index + 2) {
@@ -689,6 +754,7 @@ function handleEvents(events) {
   for (const e of events) {
     switch (e.type) {
       case 'start':
+        recorder.reset();
         sound.start();
         break;
       case 'checkpoint': {
@@ -708,7 +774,10 @@ function handleEvents(events) {
         sound.fall();
         renderer.addShake(0.4);
         showToast(run.checkpoint >= 0 ? 'Back to checkpoint' : 'Try again', '#ffffff');
-        if (run.checkpoint < 0) splits = [];
+        if (run.checkpoint < 0) {
+          splits = [];
+          recorder.reset();
+        }
         break;
       case 'land':
         sound.land(e.speed);
@@ -796,6 +865,7 @@ function backToCheckpoint() {
   const hadCheckpoint = run.checkpoint >= 0;
   respawn(run);
   if (!hadCheckpoint) {
+    recorder.reset();
     splits = [];
     renderer.setCheckpointReached(-1);
   }
@@ -945,6 +1015,12 @@ renderer.baseFov = settings.fov;
 renderer.shakeEnabled = settings.shake;
 renderer.speedFx = settings.speedFx;
 ui.settingsBtn.addEventListener('click', () => showScreen('settings'));
+ui.ghostMode.value = settings.ghost;
+ui.ghostMode.addEventListener('change', () => {
+  settings.ghost = ui.ghostMode.value;
+  storage.setSettings(settings);
+  if (level) loadGhosts(level);
+});
 
 // --- Main loop ----------------------------------------------------------------
 
@@ -988,6 +1064,7 @@ function frame(now) {
     while (accumulator >= FIXED_DT) {
       move = bot ? botInput(bot) : input.movement();
       handleEvents(tick(run, move, FIXED_DT));
+      if (run.started && !run.finished) recorder.record(run.time, p);
       accumulator -= FIXED_DT;
     }
     if (tut) {
@@ -1013,6 +1090,7 @@ function frame(now) {
   if (toastTimer > 0 && (toastTimer -= dt) <= 0) ui.toast.classList.remove('show');
   if (splitTimer > 0 && (splitTimer -= dt) <= 0) ui.split.classList.remove('show');
 
+  renderer.updateGhosts(run.time);
   if (!bot && state === 'playing') move = input.movement();
   renderer.render(p, target && isHookable(target.box) ? target : null, dt, {
     mouseDX: mx, mouseDY: my, right: move.right, reeling: move.reel,
@@ -1038,5 +1116,6 @@ window.__skyhook = {
   editor, openEditor, newCustomLevel, startTest, backToEditor, encodeLevel, decodeLevel,
   online: { submitScore, getLeaderboard },
   get music() { return music; },
+  get ghosts() { return { mine: myGhost, record: recordGhost, recorded: recorder.samples.length }; },
   Music,
 };

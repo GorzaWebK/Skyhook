@@ -6,6 +6,7 @@ import { Rope } from './rope.js';
 import { THEMES } from './themes.js';
 import { Sparks, Rain, makeSpeedLines } from './effects.js';
 import { faceNormal } from './editor.js';
+import { ghostAt } from './ghost.js';
 
 const SKY_TOP = new THREE.Color('#3b7bd4');
 const SKY_HORIZON = new THREE.Color('#bfdcf2');
@@ -166,6 +167,7 @@ export class Renderer {
     this.flash = 0;
     this.nextLightning = 5;
     this.onThunder = null; // set by the game to play thunder
+    this.ghosts = [];
     this.setTheme('day');
 
     this.shake = 0;
@@ -213,6 +215,64 @@ export class Renderer {
     this.floor.material.color.set(t.horizon);
     this.rain.mesh.visible = !!t.rain;
     this.flash = 0;
+  }
+
+  // Ghosts: [{ samples, color, label }]. Replaces any current ghosts.
+  setGhosts(list) {
+    for (const g of this.ghosts) {
+      this.scene.remove(g.group, g.rope);
+      g.group.traverse((o) => { o.geometry?.dispose(); o.material?.map?.dispose(); o.material?.dispose(); });
+      g.rope.geometry.dispose();
+      g.rope.material.dispose();
+    }
+    this.ghosts = list.filter((g) => g.samples?.length).map((g) => {
+      const group = new THREE.Group();
+      const mat = new THREE.MeshBasicMaterial({ color: g.color, transparent: true, opacity: 0.4, depthWrite: false });
+      const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.42, 0.7, 6, 12), mat);
+      const core = new THREE.Mesh(new THREE.SphereGeometry(0.18, 12, 8), new THREE.MeshBasicMaterial({ color: g.color, transparent: true, opacity: 0.9, depthWrite: false }));
+      core.position.y = 0.3;
+      group.add(body, core);
+      // Name tag.
+      const c = document.createElement('canvas');
+      c.width = 256;
+      c.height = 64;
+      const ctx = c.getContext('2d');
+      ctx.font = 'bold 30px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = 'rgba(10, 18, 32, 0.6)';
+      ctx.fillRect(8, 10, 240, 44);
+      ctx.fillStyle = g.color;
+      ctx.fillText(g.label.slice(0, 20), 128, 43);
+      const tag = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false }));
+      tag.scale.set(2.6, 0.65, 1);
+      tag.position.y = 1.3;
+      group.add(tag);
+      const ropeGeo = new THREE.BufferGeometry();
+      ropeGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
+      const rope = new THREE.Line(ropeGeo, new THREE.LineBasicMaterial({ color: g.color, transparent: true, opacity: 0.7 }));
+      rope.frustumCulled = false;
+      this.scene.add(group, rope);
+      return { ...g, group, rope, body };
+    });
+  }
+
+  updateGhosts(t) {
+    for (const g of this.ghosts) {
+      const s = ghostAt(g.samples, t);
+      g.group.visible = !!s;
+      g.rope.visible = !!s?.hook;
+      if (!s) continue;
+      g.group.position.set(...s.pos);
+      // Fade the ghost when it's right on top of you so it doesn't block the view.
+      const d = g.group.position.distanceTo(this.camera.position);
+      g.body.material.opacity = 0.4 * Math.min(1, Math.max(0.1, (d - 1) / 4));
+      if (s.hook) {
+        const a = g.rope.geometry.attributes.position;
+        a.setXYZ(0, s.pos[0], s.pos[1] + 0.3, s.pos[2]);
+        a.setXYZ(1, ...s.hook);
+        a.needsUpdate = true;
+      }
+    }
   }
 
   // Sparks where the hook bites into a block.

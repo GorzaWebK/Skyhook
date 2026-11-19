@@ -28,6 +28,9 @@ export const storage = {
   getProgress: () => ({ unlocked: 1, last: 0, ...get('progress', {}) }),
   setProgress: (p) => set('progress', p),
   // Levels made in the editor (or imported): [{ id, data: { v, name, blocks }, own, tested }]
+  // Best-run ghost recording per level (see ghost.js).
+  getGhost: (id) => get(`ghost.${id}`, null),
+  setGhost: (id, code) => set(`ghost.${id}`, code),
   getCustomLevels: () => get('custom', []),
   setCustomLevels: (list) => set('custom', list),
 };

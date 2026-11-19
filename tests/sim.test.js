@@ -420,3 +420,41 @@ test('a hook in a moving anchor rides along with it', () => {
   step(p, idle, course);
   assert.ok(p.hook.point.clone().sub(a.center).distanceTo(offset) < 1e-9, 'hook stays on the same spot of the block');
 });
+
+// --- Ghost replays -------------------------------------------------------------------
+import { GhostRecorder, ghostAt, encodeGhost, decodeGhost, GHOST_RATE } from '../src/ghost.js';
+
+test('ghosts: recorded at 20 per second during a run, compressed and restored', async () => {
+  const course = buildLevel(LEVELS[0]);
+  const run = createRun(course);
+  const bot = createBot(run);
+  const rec = new GhostRecorder();
+  let finish = null;
+  for (let i = 0; i < 120 * 60 && !finish; i++) {
+    finish = tick(run, botInput(bot)).find((e) => e.type === 'finish');
+    if (run.started && !run.finished) rec.record(run.time, run.player);
+  }
+  assert.ok(finish);
+  const expected = Math.floor(finish.time * GHOST_RATE);
+  assert.ok(Math.abs(rec.samples.length - expected) <= 2, `${rec.samples.length} samples for ${finish.time.toFixed(2)} s`);
+  assert.ok(rec.samples.some((s) => s[3] === 1), 'records when the rope is attached');
+  const code = await encodeGhost(rec.samples);
+  assert.match(code, /^G1\./);
+  assert.ok(code.length < 20000, `ghost code ${code.length} chars`);
+  const back = await decodeGhost(code);
+  assert.equal(back.length, rec.samples.length);
+  for (let i = 0; i < back.length; i++) {
+    for (let f = 0; f < 7; f++) assert.ok(Math.abs(back[i][f] - rec.samples[i][f]) <= 0.006, `sample ${i} field ${f}`);
+  }
+  await assert.rejects(decodeGhost('nope'));
+});
+
+test('ghosts: playback interpolates between samples', () => {
+  const samples = [[0, 0, 0, 0, 0, 0, 0], [2, 4, -6, 1, 9, 9, 9]];
+  assert.deepEqual(ghostAt(samples, 0).pos, [0, 0, 0]);
+  assert.deepEqual(ghostAt(samples, 0.5 / GHOST_RATE).pos, [1, 2, -3]);
+  assert.equal(ghostAt(samples, 0).hook, null);
+  assert.deepEqual(ghostAt(samples, 1 / GHOST_RATE).hook, [9, 9, 9]);
+  assert.equal(ghostAt(samples, 99).done, true);
+  assert.equal(ghostAt([], 1), null);
+});
