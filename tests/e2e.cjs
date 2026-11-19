@@ -433,6 +433,20 @@ async function waitForServer() {
     await g(() => document.exitPointerLock());
     await page.waitForTimeout(300);
 
+    // Daily challenge.
+    await page.goto(URL);
+    await page.waitForTimeout(800);
+    check(await page.isVisible('#daily-btn') && (await page.textContent('#daily-info')).includes('not played yet'), 'Daily challenge button shows on the main menu');
+    await page.goto(`${URL}?bot=1&daily=1`);
+    state = '';
+    for (let i = 0; i < 200 && state !== 'finished'; i++) { await page.waitForTimeout(500); state = await g(() => window.__skyhook.state); }
+    const daily = await g(() => ({ title: document.getElementById('finish-title').textContent, lvl: window.__skyhook.level, done: JSON.parse(localStorage.getItem('skyhook.progress')).dailyDone }));
+    check(state === 'finished' && daily.lvl.daily && daily.title.startsWith('Daily challenge #'), `the autopilot finishes today's daily (${daily.title})`);
+    check(daily.done?.includes(daily.lvl.date) && (await page.textContent('#finish-medal')).includes('Gold'), 'finishing the daily records the day and awards a medal');
+    await page.goto(URL);
+    await page.waitForTimeout(800);
+    check((await page.textContent('#daily-info')).includes('best') && (await page.textContent('#daily-info')).includes('streak'), `main menu shows your daily best and streak ("${(await page.textContent('#daily-info')).trim()}")`);
+
     // Sky themes, speed lines, sparks.
     for (const [lvl, theme] of [[1, 'day'], [11, 'sunset'], [21, 'night']]) {
       await page.goto(`${URL}?unlock=all&level=${lvl}`);

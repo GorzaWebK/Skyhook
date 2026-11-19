@@ -55,6 +55,7 @@ The full controls list sits behind the **Controls** button on the main menu.
   - **My Levels:** Every change saves automatically. My Levels lists your levels with Play, Edit, Share and Delete.
   - **Sharing:** **Share** gives a short code (it starts with `SKY1.`) that a friend can paste into **Import a code**.
   - Finishing a level you built yourself unlocks the **Architect** gun skin.
+- **Daily challenge:** A new level every day (the day changes at midnight UTC), the same for everyone, from the gold **Daily challenge** button on the main menu. The difficulty varies between roughly level 9 and level 23, and the sky rotates between day, sunset, night and storm. It has medals, ghosts, its own daily online leaderboard (on the Leaderboards page, one step back from Level 1) and a streak counter for consecutive days played. Two years of daily layouts were picked ahead of time by `scripts/find-daily.mjs` and checked to be finishable by the autopilot.
 - **Ghost replays:** Your best run on each level is recorded, and next time you race a see-through copy of yourself (cyan, "Your best"). Online, a new best also uploads your recording, so everyone can race the **world record holder's ghost** (gold, with their name). Choose Off, Your best, World record or Both under **Settings → Ghost**.
 - **Online leaderboards:** A top 10 for every level, with your world rank shown on the finish screen and a **Leaderboards** page (with your player name) on the main menu. It uses the shared Firebase project (see "Online leaderboards" below).
 - **Grapple gun:** You hold a grapple gun in a gloved hand, drawn in first person and built from shapes in code. It sways as you look around, bobs as you walk, leans when you strafe, kicks when you fire, and its glowing spool spins when you reel in.
@@ -72,7 +73,7 @@ The full controls list sits behind the **Controls** button on the main menu.
 - `scripts/find-seeds.mjs` picks a seed for each level that the autopilot can finish, and records the autopilot's time (the gold medal time). Both are written to `src/level-seeds.js`. Rerun it after changing the generator, physics or bot.
 - Physics and game rules (`src/physics.js`, `src/run.js`) contain no drawing code. They run on a fixed 120 Hz timestep, so the game plays the same at any frame rate and can be tested in Node.
 - An autopilot (`src/bot.js`) flies the levels. The tests use it to prove all 30 can be finished. Add `?bot=1` to the URL to watch it play.
-- Testing helpers: `?level=N` opens level N (if unlocked), `?tutorial=1` opens the tutorial, and `?unlock=all` unlocks every level for that visit without saving.
+- Testing helpers: `?level=N` opens level N (if unlocked), `?tutorial=1` opens the tutorial, `?daily=1` opens today's daily, and `?unlock=all` unlocks every level for that visit without saving.
 
 | File | What it does |
 | --- | --- |
@@ -88,6 +89,7 @@ The full controls list sits behind the **Controls** button on the main menu.
 | `src/online-config.js` | Firebase web config (null = online off) |
 | `firebase/database.rules.json` | Skyhook's security rules on their own |
 | `firebase/database.rules.full.json` | Complete rules file for the Firebase console (Foundry Arena + Skyhook) |
+| `src/daily.js` | Daily challenge: today's level, countdown, streak |
 | `src/skins.js` | Gun skins and their unlock rules |
 | `src/tutorial.js` | Tutorial steps and when each one is ticked off |
 | `src/render.js` | three.js scene, sky, clouds, hook head |
@@ -129,5 +131,4 @@ Every push to `main` runs the tests, builds and deploys to GitHub Pages via `.gi
 ## Roadmap ideas
 
 - Ghost replay of your best run (and the world record)
-- Daily course from a shared seed
 - Moving anchors and obstacles

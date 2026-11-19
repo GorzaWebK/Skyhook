@@ -4,6 +4,7 @@ import { encodeLevel, decodeLevel, newLevelId } from './custom.js';
 import { onlineEnabled, submitScore, getLeaderboard, getRecordGhost, cleanName } from './online.js';
 import { GhostRecorder, encodeGhost, decodeGhost } from './ghost.js';
 import { THEMES } from './themes.js';
+import { dailyFor, buildDaily, timeUntilNext, dailyStreak, dateKey } from './daily.js';
 import { TUTORIAL_STEPS, createTutorialFlags } from './tutorial.js';
 import { LEVELS, MEDALS, buildLevel, medalFor, nextMedal } from './levels.js';
 import { raycast, eyePosition, aimDirection, FIXED_DT, TUNING } from './physics.js';
@@ -28,6 +29,7 @@ const ui = {
   menu: $('menu'), screens: document.querySelectorAll('.screen'),
   playBtn: $('play-btn'), restartBtn: $('restart-btn'), levelsBtn: $('levels-btn'), controlsBtn: $('controls-btn'),
   tutorialBtn: $('tutorial-btn'), newHint: $('new-hint'), editorBtn: $('editor-btn'),
+  dailyBtn: $('daily-btn'), dailyInfo: $('daily-info'),
   mlNew: $('ml-new'), mlImportToggle: $('ml-import-toggle'), mlImport: $('ml-import'), importCode: $('import-code'),
   importBtn: $('import-btn'), importMsg: $('import-msg'), mlList: $('ml-list'),
   mlShare: $('ml-share'), mlShareTitle: $('ml-share-title'), mlShareCode: $('ml-share-code'), mlShareMsg: $('ml-share-msg'),
@@ -240,13 +242,14 @@ function isUnlocked(index) {
 }
 
 function levelTitle(l) {
+  if (l.daily) return `Daily challenge #${l.number} (${l.date})`;
   if (l.custom) return `${mode === 'test' ? 'Testing' : 'Custom'}: ${l.name}`;
   return l.tutorial ? 'Tutorial' : `Level ${l.number}: ${l.name}`;
 }
 
 function loadDef(def) {
   level = def;
-  course = def.tutorial ? buildTutorialCourse() : def.custom ? buildCustomCourse(def.data) : buildLevel(def);
+  course = def.tutorial ? buildTutorialCourse() : def.custom ? buildCustomCourse(def.data) : def.daily ? buildDaily(def) : buildLevel(def);
   run = createRun(course);
   bot = botMode ? createBot(run) : null;
   best = storage.getBest(def.id);
@@ -255,7 +258,7 @@ function loadDef(def) {
   renderer.setTheme(course.theme || 'day');
   recorder.reset();
   loadGhosts(def);
-  if (!def.tutorial && !def.custom) {
+  if (!def.tutorial && !def.custom && !def.daily) {
     progress.last = def.index;
     storage.setProgress(progress);
   }
@@ -265,7 +268,7 @@ function loadDef(def) {
   ui.finish.classList.add('hidden');
   ui.finishBoard.classList.add('hidden');
   ui.split.className = '';
-  ui.levelLabel.textContent = def.custom
+  ui.levelLabel.textContent = def.daily ? `Daily challenge #${def.number}` : def.custom
     ? (mode === 'test' ? `Testing · ${def.name} (T to edit)` : `Custom · ${def.name}`)
     : def.tutorial ? 'Tutorial' : `Level ${def.number} · ${def.name}`;
   refreshBest();
@@ -445,6 +448,23 @@ function exitEditor() {
   showScreen('mylevels');
 }
 
+function playDaily() {
+  mode = 'level';
+  customLevel = null;
+  loadDef(dailyFor());
+  startPlaying();
+}
+
+function refreshDailyButton() {
+  const d = dailyFor();
+  const b = storage.getBest(d.id);
+  const medal = medalFor(d, b?.time);
+  const streak = dailyStreak(progress.dailyDone || []);
+  ui.dailyInfo.innerHTML = `#${d.number} · ${THEMES[d.theme].name} · ` +
+    (b ? `best ${formatTime(b.time)}${medalBadge(medal)}` : 'not played yet') +
+    ` · new one in ${timeUntilNext()}` + (streak ? ` · 🔥 ${streak}-day streak` : '');
+}
+
 function loadTutorial() {
   loadDef(TUTORIAL);
 }
@@ -543,13 +563,18 @@ function boardRowsHtml(board, limit) {
   return rows.join('');
 }
 
+// Board -1 is today's daily challenge; 0-29 are the levels.
+function boardDef(i) {
+  return i < 0 ? dailyFor() : LEVELS[i];
+}
+
 async function showBoard() {
-  const l = LEVELS[boardIndex];
-  ui.boardLevel.textContent = `Level ${l.number}: ${l.name}`;
+  const l = boardDef(boardIndex);
+  ui.boardLevel.textContent = l.daily ? `Today's daily challenge #${l.number}` : `Level ${l.number}: ${l.name}`;
   ui.boardList.innerHTML = '<div class="board-empty">Loading...</div>';
   try {
     const board = await getLeaderboard(l.id, 10);
-    if (LEVELS[boardIndex] !== l) return; // switched level while loading
+    if (boardDef(boardIndex).id !== l.id) return; // switched level while loading
     ui.boardList.innerHTML = boardRowsHtml(board, 10);
   } catch (e) {
     ui.boardList.innerHTML = `<div class="board-empty err">Couldn't load the leaderboard (${e.message}).</div>`;
@@ -579,7 +604,7 @@ function showScreen(name) {
   if (name === 'levels') buildLevelGrid();
   if (name === 'skins') buildSkinGrid();
   if (name === 'boards') {
-    boardIndex = level && !level.custom && !level.tutorial ? level.index : 0;
+    boardIndex = level?.daily ? -1 : level && !level.custom && !level.tutorial ? level.index : 0;
     ui.boardName.value = settings.playerName;
     showBoard();
   }
@@ -603,6 +628,7 @@ function refreshMainScreen() {
   ui.playBtn.textContent = inProgress ? 'RESUME' : 'PLAY';
   ui.restartBtn.classList.toggle('hidden', !inProgress);
   ui.tutorialBtn.classList.toggle('highlight', !progress.tutorialDone);
+  refreshDailyButton();
   ui.newHint.classList.toggle('hidden', !!progress.tutorialDone);
   refreshBest();
 }
@@ -713,7 +739,7 @@ function finishLevel(e) {
   const oldMedal = medalFor(level, best?.time);
   const runMedal = medalFor(level, e.time);
   const newMedal = runMedal && (!oldMedal || MEDALS.indexOf(runMedal) < MEDALS.indexOf(oldMedal));
-  ui.finishTitle.textContent = `Level ${level.number} complete!`;
+  ui.finishTitle.textContent = level.daily ? `Daily challenge #${level.number} complete!` : `Level ${level.number} complete!`;
   ui.finishTime.textContent = formatTime(e.time);
   if (isRecord) {
     ui.finishNote.textContent = best ? `New best! ${(best.time - e.time).toFixed(3)}s faster` : 'First finish! That is your best time to beat.';
@@ -738,6 +764,17 @@ function finishLevel(e) {
   if (newMedal) sound.medal(runMedal);
   submitAndShow(level, e.time, ghostSave);
   ui.finishMedal.innerHTML += announceNewSkins(skinsBefore);
+  if (level.daily) {
+    const done = new Set(progress.dailyDone || []);
+    done.add(level.date);
+    progress.dailyDone = [...done].sort().slice(-400);
+    storage.setProgress(progress);
+    const streak = dailyStreak(progress.dailyDone);
+    ui.finishHint.innerHTML = `${streak > 1 ? `🔥 ${streak}-day streak! · ` : ''}New daily in ${timeUntilNext()} · <kbd>R</kbd> fly again · <kbd>Esc</kbd> menu`;
+    state = 'finished';
+    ui.finish.classList.remove('hidden');
+    return;
+  }
   const hasNext = level.index + 1 < LEVELS.length;
   if (hasNext && progress.unlocked < level.index + 2) {
     progress.unlocked = level.index + 2;
@@ -846,7 +883,7 @@ input.handlers.key = (code) => {
   if (state === 'editor') return editorKey(code);
   if (code === 'KeyT' && mode === 'test' && state !== 'menu') return backToEditor();
   if (code === 'KeyR' && state !== 'menu') restart();
-  if ((code === 'KeyN' || code === 'Enter') && state === 'finished' && !level.custom && level.index + 1 < LEVELS.length) {
+  if ((code === 'KeyN' || code === 'Enter') && state === 'finished' && !level.custom && !level.daily && level.index + 1 < LEVELS.length) {
     loadLevel(level.index + 1); // the tutorial's index is -1, so this goes to level 1
     state = 'playing';
   }
@@ -909,14 +946,15 @@ ui.levelsBtn.addEventListener('click', () => showScreen('levels'));
 ui.controlsBtn.addEventListener('click', () => showScreen('controls'));
 ui.skinsBtn.addEventListener('click', () => showScreen('skins'));
 ui.editorBtn.addEventListener('click', () => showScreen('mylevels'));
+ui.dailyBtn.addEventListener('click', playDaily);
 ui.boardsBtn.classList.toggle('hidden', !onlineEnabled);
 ui.boardsBtn.addEventListener('click', () => showScreen('boards'));
 ui.boardPrev.addEventListener('click', () => {
-  boardIndex = (boardIndex + LEVELS.length - 1) % LEVELS.length;
+  boardIndex = boardIndex <= -1 ? LEVELS.length - 1 : boardIndex - 1; // wraps through the daily (-1)
   showBoard();
 });
 ui.boardNext.addEventListener('click', () => {
-  boardIndex = (boardIndex + 1) % LEVELS.length;
+  boardIndex = boardIndex >= LEVELS.length - 1 ? -1 : boardIndex + 1;
   showBoard();
 });
 ui.boardName.addEventListener('change', () => {
@@ -1029,6 +1067,7 @@ const startIndex = Number.isInteger(requested) && requested >= 0 && requested < 
   ? requested
   : isUnlocked(progress.last) ? progress.last : 0;
 if (params.has('tutorial')) loadTutorial();
+else if (params.has('daily')) loadDef(dailyFor());
 else loadLevel(startIndex);
 showScreen('main');
 
@@ -1109,7 +1148,7 @@ window.__skyhook = {
   get tutorial() { return tut; },
   get state() { return state; },
   get lastRelease() { return lastRelease; },
-  renderer, restart, loadLevel, loadTutorial, formatTime, TUNING, medalCounts,
+  renderer, restart, loadLevel, loadTutorial, playDaily, dailyFor, formatTime, TUNING, medalCounts,
   get skin() { return settings.skin; },
   get mode() { return mode; },
   get customLevel() { return customLevel; },

@@ -140,6 +140,13 @@ async function browserTests() {
     }
     const rows = await p2.$$eval('#board-list .board-row', (els) => els.map((e) => e.textContent));
     check(rows.length === 2 && rows[0].includes('SkyAce') && rows[1].includes('Rival (you)'), `leaderboard is sorted fastest first (${rows.join(' | ')})`);
+    // Today's daily is on the leaderboard page too (one step back from level 1).
+    await p2.evaluate(() => window.__skyhook.online.submitScore(window.__skyhook.dailyFor().id, 'Rival', 22));
+    await p2.click('#board-prev');
+    let dailyList = '';
+    for (let i = 0; i < 40 && !dailyList.includes('Rival'); i++) { await p2.waitForTimeout(250); dailyList = await p2.textContent('#board-list'); }
+    check((await p2.textContent('#board-level')).includes("Today's daily") && dailyList.includes('Rival (you)'), 'the Leaderboards page has a board for today\'s daily challenge');
+    await p2.click('#board-next');
     await p2.fill('#board-name', 'Rival<script>');
     await p2.press('#board-name', 'Tab');
     check((await p2.inputValue('#board-name')) === 'Rivalscript', 'player names are cleaned');

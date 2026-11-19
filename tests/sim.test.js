@@ -378,7 +378,7 @@ test('sky themes: day, sunset and night by level group; custom levels keep a val
   assert.equal(themeForLevelIndex(10), 'sunset');
   assert.equal(themeForLevelIndex(29), 'night');
   assert.equal(buildLevel(LEVELS[15]).theme, 'sunset');
-  assert.deepEqual(THEME_IDS.sort(), ['day', 'night', 'storm', 'sunset']);
+  assert.deepEqual([...THEME_IDS].sort(), ['day', 'night', 'storm', 'sunset']);
   const data = { ...handmade(), theme: 'storm' };
   assert.equal(buildCustomCourse(data).theme, 'storm');
   assert.equal((await decodeLevel(await encodeLevel(data))).theme, 'storm', 'theme survives a share code');
@@ -457,4 +457,40 @@ test('ghosts: playback interpolates between samples', () => {
   assert.deepEqual(ghostAt(samples, 1 / GHOST_RATE).hook, [9, 9, 9]);
   assert.equal(ghostAt(samples, 99).done, true);
   assert.equal(ghostAt([], 1), null);
+});
+
+// --- Daily challenge ---------------------------------------------------------------
+import { dailyFor, buildDaily, dailyStreak, timeUntilNext, dateKey } from '../src/daily.js';
+import { DAILY } from '../src/daily-seeds.js';
+
+test('daily challenge: same layout for everyone on a date, different each day', () => {
+  const a = dailyFor('2026-11-19');
+  const b = dailyFor('2026-11-19');
+  const c = dailyFor('2026-11-20');
+  assert.deepEqual(a, b);
+  assert.equal(a.id, 'daily-2026-11-19');
+  assert.equal(a.number, 1);
+  assert.notEqual(a.seed, c.seed);
+  assert.deepEqual(['2026-11-19', '2026-11-20', '2026-11-21', '2026-11-22'].map((d) => dailyFor(d).theme), ['day', 'sunset', 'night', 'storm']);
+  assert.equal(DAILY.length, 730, 'two years of dailies');
+  assert.ok(dailyFor('2030-01-01').seed > 0, 'keeps going after the list runs out');
+  assert.equal(dateKey(new Date('2026-11-19T23:59:00Z')), '2026-11-19', 'days follow UTC');
+  assert.equal(timeUntilNext(new Date('2026-11-19T22:30:00Z')), '1h 30m');
+});
+
+test('daily challenge: the first 60 days are finishable and their gold times are current', () => {
+  for (let day = 0; day < 60; day++) {
+    const key = new Date(Date.UTC(2026, 10, 19 + day)).toISOString().slice(0, 10);
+    const def = dailyFor(key);
+    const r = botRun(buildDaily(def));
+    assert.ok(r.finished && r.falls === 0, `day ${day + 1} (${key})`);
+    assert.ok(Math.abs(r.time - DAILY[day][2]) < 0.002, `day ${day + 1} par ${DAILY[day][2]} vs ${r.time}`);
+  }
+});
+
+test('daily streak counts consecutive days', () => {
+  assert.equal(dailyStreak([], '2026-11-25'), 0);
+  assert.equal(dailyStreak(['2026-11-23', '2026-11-24', '2026-11-25'], '2026-11-25'), 3);
+  assert.equal(dailyStreak(['2026-11-23', '2026-11-24'], '2026-11-25'), 2, "today not played yet: yesterday's streak still counts");
+  assert.equal(dailyStreak(['2026-11-20', '2026-11-24', '2026-11-25'], '2026-11-25'), 2, 'a missed day breaks it');
 });
