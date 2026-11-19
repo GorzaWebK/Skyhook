@@ -65,6 +65,7 @@ The full controls list sits behind the **Controls** button on the main menu.
 - **Sky themes:** Levels 1–10 are set in daytime, 11–20 at sunset and 21–30 at night (with stars and a moon). A fourth theme, **Storm**, has dark clouds, rain, lightning and thunder. You can pick any of the four for your own levels in the editor.
 - **Speed effects:** Thin speed lines and darker screen edges fade in when you fly fast (they can be switched off in Settings). Sparks fly where the hook bites.
 - **Feel:** The view widens with speed, the camera shakes on hard landings and when the hook catches, and wind and rope-creak sounds follow your speed.
+- **Achievements:** 30 to earn, with a pop-up when you unlock one. They cover finishing each set of levels, medals, skill (no falls, no reeling, few hooks, top speeds, long swings, beating your ghost), distance and play time, daily streaks, building and publishing levels, and holding a world record. They're listed on the Profile page's Achievements tab, with progress bars.
 - **Profile: stats:** Lifetime stats on the **Profile** page: play time, distance travelled and swung, hooks fired and landed, top speed, longest swing, hops, jumps, falls, checkpoints, finishes, medals and best daily streak.
 - **Settings page:** graphics quality (High, Medium, Low), a frames-per-second counter, mouse sensitivity, invert mouse, field of view, separate sound effects and music volumes, mute, camera shake on/off and speed effects on/off. All are saved.
 
@@ -93,6 +94,7 @@ The full controls list sits behind the **Controls** button on the main menu.
 | `firebase/database.rules.full.json` | Complete rules file for the Firebase console (Foundry Arena + Skyhook) |
 | `src/daily.js` | Daily challenge: today's level, countdown, streak |
 | `src/stats.js` | Lifetime stats |
+| `src/achievements.js` | The 30 achievements and when each is earned |
 | `src/skins.js` | Gun skins and their unlock rules |
 | `src/tutorial.js` | Tutorial steps and when each one is ticked off |
 | `src/render.js` | three.js scene, sky, clouds, hook head |

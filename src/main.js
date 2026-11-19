@@ -4,6 +4,7 @@ import { encodeLevel, decodeLevel, newLevelId } from './custom.js';
 import { onlineEnabled, submitScore, getLeaderboard, getRecordGhost, cleanName, publishLevel, unpublishLevel, listLevels, voteLevel } from './online.js';
 import { GhostRecorder, encodeGhost, decodeGhost } from './ghost.js';
 import { StatsTracker, statsRows } from './stats.js';
+import { ACHIEVEMENTS, newAchievements } from './achievements.js';
 import { THEMES } from './themes.js';
 import { dailyFor, buildDaily, timeUntilNext, dailyStreak, dateKey } from './daily.js';
 import { TUTORIAL_STEPS, createTutorialFlags } from './tutorial.js';
@@ -48,6 +49,7 @@ const ui = {
   sens: $('sens'), sensVal: $('sens-val'), mute: $('mute'), musicVol: $('music-vol'), musicVal: $('music-val'),
   invert: $('invert'), fov: $('fov'), fovVal: $('fov-val'), sfxVol: $('sfx-vol'), sfxVal: $('sfx-val'),
   shake: $('shake'), speedfx: $('speedfx'), settingsBtn: $('settings-btn'), ghostMode: $('ghost-mode'),
+  achPopup: $('ach-popup'), achGrid: $('ach-grid'), achSummary: $('ach-summary'),
   profileBtn: $('profile-btn'), statsGrid: $('stats-grid'), tabStats: $('tab-stats'), tabAch: $('tab-ach'),
   profileStats: $('profile-stats'), profileAch: $('profile-ach'),
   quality: $('quality'), showFps: $('show-fps'), fps: $('fps'), phoneNotice: $('phone-notice'), phoneContinue: $('phone-continue'),
@@ -473,6 +475,7 @@ async function publishCustom(lvl) {
     saveCustom(lvl);
     ui.mlMsg.className = 'msg good';
     ui.mlMsg.textContent = `"${lvl.data.name}" is published! Find it under Community levels.`;
+    checkAchievements({ flags: { published: true } });
     buildMyLevels();
   } catch (e) {
     ui.mlMsg.className = 'msg err';
@@ -638,6 +641,7 @@ function updateCheckpointLabel() {
 
 function restart() {
   restartRun(run);
+  resetRunFacts();
   stats.resetPosition();
   recorder.reset();
   ui.finishBoard.classList.add('hidden');
@@ -701,6 +705,7 @@ async function submitAndShow(l, time, ghostPromise = null) {
     const board = await getLeaderboard(l.id, 5);
     if (level !== l) return;
     const rank = board.me ? `You're <b>#${board.me.rank}</b> in the world` : '';
+    if (board.me?.rank === 1) checkAchievements({ flags: { worldRecord: true } });
     ui.finishBoard.innerHTML = `<div class="board-title">Online leaderboard · ${rank}</div>${boardRowsHtml(board, 5)}`;
   } catch (e) {
     ui.finishBoard.innerHTML = `<div class="board-title">Online leaderboard</div><div class="board-empty err">Couldn't reach the leaderboard (${e.message}).</div>`;
@@ -722,6 +727,70 @@ function showProfileTab(tab) {
   if (tab === 'achievements') buildAchievements?.();
 }
 let buildAchievements = null;
+
+// --- Achievements -------------------------------------------------------------
+
+const achieved = storage.getAchievements(); // id -> date earned
+let runFacts = null; // facts about the current run, for skill achievements
+const popupQueue = [];
+let popupTimer = 0;
+
+function resetRunFacts() {
+  runFacts = {
+    levelNumber: level?.custom || level?.daily || level?.tutorial ? 0 : level?.number ?? 0,
+    community: !!level?.community, own: !!customLevel?.own,
+    falls: 0, retries: 0, reeled: false, hooks: 0,
+  };
+}
+
+function achievementContext(runDone, flags) {
+  const finished = new Set(LEVELS.filter((l) => storage.getBest(l.id)).map((l) => l.id));
+  return { stats: stats.s, medals: medalCounts(), progress, finished, run: runDone, flags };
+}
+
+// Check for newly earned achievements. silent: award without pop-ups.
+function checkAchievements({ run: runDone = null, flags = {}, silent = false } = {}) {
+  const fresh = newAchievements(achievementContext(runDone, flags), achieved);
+  if (!fresh.length) return [];
+  const today = new Date().toISOString().slice(0, 10);
+  for (const a of fresh) {
+    achieved[a.id] = today;
+    if (!silent) popupQueue.push(a);
+  }
+  storage.setAchievements(achieved);
+  if (!silent) afterAchievements?.();
+  return fresh;
+}
+let afterAchievements = null; // set later (cosmetics unlocks)
+
+function updatePopups(dt) {
+  if (popupTimer > 0) {
+    popupTimer -= dt;
+    if (popupTimer <= 0) ui.achPopup.classList.remove('show');
+    return;
+  }
+  const a = popupQueue.shift();
+  if (!a) return;
+  ui.achPopup.innerHTML = `<span class="ap-icon">${a.icon}</span><div><div class="ap-title">Achievement unlocked</div><div class="ap-name">${a.name}</div><div class="ap-desc">${a.desc}</div></div>`;
+  ui.achPopup.classList.add('show');
+  sound.achievement();
+  popupTimer = 3.6;
+}
+
+buildAchievements = () => {
+  const c = achievementContext(null, {});
+  const got = ACHIEVEMENTS.filter((a) => achieved[a.id]).length;
+  ui.achSummary.textContent = `${got} / ${ACHIEVEMENTS.length} unlocked`;
+  ui.achGrid.innerHTML = ACHIEVEMENTS.map((a) => {
+    const done = !!achieved[a.id];
+    const pr = !done && a.progress ? a.progress(c) : null;
+    return `<div class="ach${done ? ' done' : ''}">
+      <span class="ach-icon">${a.icon}</span>
+      <div class="ach-text"><b>${a.name}</b><span>${a.desc}</span>
+      ${done ? `<em>Unlocked ${achieved[a.id]}</em>` : pr ? `<i class="ach-bar"><i style="width:${Math.round((pr[0] / pr[1]) * 100)}%"></i></i><em>${pr[0]} / ${pr[1]}</em>` : '<em>Locked</em>'}</div>
+    </div>`;
+  }).join('');
+};
 
 // --- Menu screens -------------------------------------------------------------
 
@@ -818,6 +887,7 @@ function finishTutorial(e) {
     storage.setBest(level.id, best);
     refreshBest();
   }
+  checkAchievements();
   ui.finishTitle.textContent = 'Tutorial complete!';
   ui.finishTime.textContent = formatTime(e.time);
   ui.finishNote.textContent = "You've got the basics. Time for the real thing.";
@@ -833,6 +903,7 @@ function finishCustom(e) {
   sound.finish();
   const skinsBefore = unlockedSkinIds();
   const isRecord = !best || e.time < best.time;
+  const beatGhost = isRecord && !!myGhost;
   if (isRecord) {
     best = { time: e.time, splits: [...splits] };
     storage.setBest(level.id, best);
@@ -847,6 +918,7 @@ function finishCustom(e) {
     progress.editorFinished = true;
     storage.setProgress(progress);
   }
+  checkAchievements({ run: runFacts, flags: { beatGhost } });
   ui.finishTitle.textContent = mode === 'test' ? 'Test run complete!' : `${level.name} complete!`;
   ui.finishTime.textContent = formatTime(e.time);
   ui.finishNote.textContent = isRecord ? 'New best on this level!' : `Best: ${formatTime(best.time)}`;
@@ -867,6 +939,7 @@ function finishLevel(e) {
   sound.finish();
   const isRecord = !best || e.time < best.time;
   let ghostSave = null;
+  const beatGhost = isRecord && !!myGhost;
   const skinsBefore = unlockedSkinIds();
   const oldMedal = medalFor(level, best?.time);
   const runMedal = medalFor(level, e.time);
@@ -894,6 +967,7 @@ function finishLevel(e) {
     ? `<div class="fm-next">Next: ${medalBadge(next)} ${MEDAL_NAME[next]} at ${formatTime(level.medals[next])}</div>`
     : bestMedal === 'gold' ? '<div class="fm-next">You have gold on this level!</div>' : '';
   if (newMedal) sound.medal(runMedal);
+  checkAchievements({ run: runFacts, flags: { beatGhost } });
   submitAndShow(level, e.time, ghostSave);
   ui.finishMedal.innerHTML += announceNewSkins(skinsBefore);
   if (level.daily) {
@@ -923,6 +997,7 @@ function handleEvents(events) {
   for (const e of events) {
     switch (e.type) {
       case 'start':
+        resetRunFacts();
         recorder.reset();
         sound.start();
         break;
@@ -950,7 +1025,9 @@ function handleEvents(events) {
         sound.fall();
         renderer.addShake(0.4);
         showToast(run.checkpoint >= 0 ? 'Back to checkpoint' : 'Try again', '#ffffff');
+        if (runFacts) runFacts.falls++;
         if (run.checkpoint < 0) {
+          resetRunFacts();
           splits = [];
           recorder.reset();
         }
@@ -960,6 +1037,7 @@ function handleEvents(events) {
         if (e.speed > 15) renderer.addShake(Math.min(0.6, e.speed / 60));
         break;
       case 'attach':
+        if (stats.s.hooksLanded === 0) setTimeout(() => checkAchievements(), 0);
         stats.add('hooksLanded');
         if (run.player.hook) renderer.hookSparks(run.player.hook.point, run.player.hook.box);
         sound.attach();
@@ -991,6 +1069,7 @@ input.handlers.hookDown = () => {
   renderer.fire();
   if (hook(run, currentAim())) {
     stats.add('hooksFired');
+    if (runFacts) runFacts.hooks++;
     sound.hookFire();
   } else {
     sound.miss();
@@ -1048,6 +1127,8 @@ function toggleMute() {
 // Instant retry: back to the last checkpoint (or the start) straight away.
 function backToCheckpoint() {
   const hadCheckpoint = run.checkpoint >= 0;
+  if (runFacts) runFacts.retries++;
+  if (!hadCheckpoint) resetRunFacts();
   respawn(run);
   if (!hadCheckpoint) {
     recorder.reset();
@@ -1239,6 +1320,8 @@ if (params.has('tutorial')) loadTutorial();
 else if (params.has('daily')) loadDef(dailyFor());
 else loadLevel(startIndex);
 showScreen('main');
+resetRunFacts();
+checkAchievements({ silent: true }); // anything already earned before achievements existed
 
 let last = performance.now();
 let accumulator = 0;
@@ -1284,6 +1367,7 @@ function frame(now) {
       handleEvents(tick(run, move, FIXED_DT));
       if (run.started && !run.finished) recorder.record(run.time, p);
       if (state === 'playing' && !run.finished && !bot) stats.step(p, FIXED_DT, run.time);
+      if (runFacts && move.reel && p.hook) runFacts.reeled = true;
       accumulator -= FIXED_DT;
     }
     if (tut) {
@@ -1306,7 +1390,11 @@ function frame(now) {
   // Music builds up with speed (and a little while swinging).
   music?.setIntensity(state === 'playing' ? Math.min(1, Math.max(0, (speed - 4) / 40) + (p.hook ? 0.1 : 0)) : 0);
 
-  if (stats.sinceSave > 5) saveStats();
+  if (stats.sinceSave > 5) {
+    saveStats();
+    checkAchievements(); // distance, speed, play time...
+  }
+  updatePopups(dt);
   if (toastTimer > 0 && (toastTimer -= dt) <= 0) ui.toast.classList.remove('show');
   if (splitTimer > 0 && (splitTimer -= dt) <= 0) ui.split.classList.remove('show');
 
@@ -1338,6 +1426,8 @@ window.__skyhook = {
   online: { submitScore, getLeaderboard },
   get music() { return music; },
   get stats() { return stats.s; },
+  get achieved() { return achieved; },
+  checkAchievements,
   saveStats,
   get ghosts() { return { mine: myGhost, record: recordGhost, recorded: recorder.samples.length }; },
   Music,

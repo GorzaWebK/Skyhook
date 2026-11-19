@@ -101,6 +101,7 @@ async function waitForServer() {
     const len1 = await g(() => window.__skyhook.run.player.hook?.length ?? 0);
     await page.mouse.up({ button: 'right' });
     check(len1 < len0 - 3, `right click reels in (${len0.toFixed(1)} -> ${len1.toFixed(1)} m)`);
+    check(await g(() => !!window.__skyhook.achieved['first-swing']) && (await page.textContent('#ach-popup')).includes('First Swing'), 'landing your first hook unlocks "First Swing" with a pop-up');
 
     await page.keyboard.down('KeyW');
     await page.waitForTimeout(1000);
@@ -202,6 +203,10 @@ async function waitForServer() {
     const lifetime = await g(() => window.__skyhook.stats);
     check(await page.isVisible('#screen-profile') && lifetime.hooksFired >= 1 && lifetime.jumps >= 1 && lifetime.falls >= 1 && lifetime.distance > 5 && statText.includes('Hooks fired'),
       `Profile shows your stats (hooks ${lifetime.hooksFired}, jumps ${lifetime.jumps}, falls ${lifetime.falls}, ${Math.round(lifetime.distance)} m)`);
+    await page.click('#tab-ach');
+    check(await page.isVisible('#ach-grid') && (await page.$$('.ach')).length === 30 && (await page.textContent('#ach-summary')).includes('/ 30 unlocked'), 'Profile shows all 30 achievements');
+    check((await page.$$('.ach.done')).length >= 1 && (await page.$$('.ach-bar')).length >= 1, 'earned achievements are highlighted and others show progress');
+    await page.screenshot({ path: 'test-results/achievements.png' });
     await page.click('#screen-profile [data-back]');
 
     await g(() => localStorage.setItem('skyhook.best.level-1', JSON.stringify({ time: 42.5, splits: [10, 20] })));
@@ -226,6 +231,8 @@ async function waitForServer() {
     check((await page.textContent('#finish-note')).startsWith('New best!'), 'finish screen announces a new best');
     check((await page.textContent('#finish-medal')).includes('New Gold medal!') && await page.isVisible('#finish-medal .medal-gold.big'), 'finishing at autopilot pace awards a gold medal');
     check(await g(() => JSON.parse(localStorage.getItem('skyhook.progress')).unlocked === 2), 'finishing level 1 unlocks level 2');
+    const ach = await g(() => Object.keys(window.__skyhook.achieved));
+    check(ach.includes('off-ground') && ach.includes('gold-rush'), `finishing level 1 at gold pace earns achievements (${ach.join(', ')})`);
     let ghostSaved = false;
     for (let i = 0; i < 20 && !ghostSaved; i++) { await page.waitForTimeout(100); ghostSaved = await g(() => !!localStorage.getItem('skyhook.ghost.level-1')); }
     check(ghostSaved, 'a new best saves your ghost');

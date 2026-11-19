@@ -180,6 +180,10 @@ export class Sound {
     );
   }
 
+  achievement() {
+    [660, 880, 1320].forEach((f, i) => this.tone({ type: 'triangle', freq: f, dur: 0.3, gain: 0.14, delay: i * 0.08 }));
+  }
+
   thunder() {
     const d = 0.2 + Math.random() * 0.8;
     this.burst({ freq: 180, q: 0.5, dur: 2.6, gain: 0.5, type: 'lowpass', sweepTo: 60, delay: d });

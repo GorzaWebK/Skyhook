@@ -224,6 +224,26 @@
       .stat { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border-radius: 10px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); }
       .stat span { font-size: 12px; color: var(--muted); }
       .stat b { font: 700 18px ui-monospace, Consolas, monospace; }
+      #ach-popup { position: fixed; top: 110px; left: 50%; transform: translate(-50%, -20px); z-index: 40; display: flex; gap: 12px; align-items: center;
+        padding: 12px 18px; border-radius: 12px; background: var(--panel); border: 1px solid var(--gold); box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+        opacity: 0; pointer-events: none; transition: opacity 0.3s, transform 0.3s; min-width: 300px; }
+      #ach-popup.show { opacity: 1; transform: translate(-50%, 0); }
+      .ap-icon { font-size: 34px; }
+      .ap-title { font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--gold); font-weight: 800; }
+      .ap-name { font-size: 18px; font-weight: 800; }
+      .ap-desc { font-size: 13px; color: var(--muted); }
+      #ach-summary { color: var(--muted); font-size: 14px; margin: 10px 0 4px; }
+      #ach-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 6px 0; max-height: 58vh; overflow-y: auto; }
+      .ach { display: flex; gap: 10px; padding: 10px; border-radius: 10px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); opacity: 0.6; }
+      .ach.done { opacity: 1; border-color: rgba(255, 211, 107, 0.6); background: rgba(255, 211, 107, 0.08); }
+      .ach-icon { font-size: 26px; filter: grayscale(1); }
+      .ach.done .ach-icon { filter: none; }
+      .ach-text { display: flex; flex-direction: column; gap: 2px; font-size: 12.5px; min-width: 0; }
+      .ach-text b { font-size: 14px; }
+      .ach-text span { color: var(--muted); }
+      .ach-text em { font-style: normal; font-size: 11px; color: var(--gold); }
+      .ach-bar { display: block; height: 5px; border-radius: 3px; background: rgba(255,255,255,0.12); overflow: hidden; margin-top: 3px; }
+      .ach-bar i { display: block; height: 100%; background: var(--accent); }
       .footer { margin-top: 16px; font-size: 12px; color: var(--muted); }
       .hud-right { position: absolute; top: 18px; right: 22px; text-align: right; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.45); }
       #level-label { font-size: 15px; font-weight: 700; }
@@ -260,6 +280,7 @@
   <body>
     <canvas id="game"></canvas>
     <div id="fps" class="hidden"></div>
+    <div id="ach-popup"></div>
     <div id="phone-notice" class="overlay hidden">
       <div class="card" style="text-align:center">
         <h1 style="font-size:44px">SKY<span>HOOK</span></h1>

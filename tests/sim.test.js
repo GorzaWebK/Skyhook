@@ -520,3 +520,26 @@ test('stats: distance, swing distance, top speed and longest swing; respawns are
   assert.ok(rows.find(([l]) => l === 'Hooks landed')[1] === '3 (75%)');
   assert.ok(rows.find(([l]) => l === 'Medals')[1] === '1 gold · 2 silver · 1 bronze');
 });
+
+// --- Achievements ------------------------------------------------------------------
+import { ACHIEVEMENTS, newAchievements } from '../src/achievements.js';
+import { defaultStats } from '../src/stats.js';
+
+test('achievements: 30 unique, and they unlock from the right situations', () => {
+  assert.equal(ACHIEVEMENTS.length, 30);
+  assert.equal(new Set(ACHIEVEMENTS.map((a) => a.id)).size, 30);
+  const base = { stats: defaultStats(), medals: { gold: 0, silver: 0, bronze: 0 }, progress: {}, finished: new Set(), run: null, flags: {} };
+  assert.deepEqual(newAchievements(base, {}), [], 'nothing for a brand new player');
+  const ids = (c) => newAchievements(c, {}).map((a) => a.id);
+  assert.ok(ids({ ...base, stats: { ...defaultStats(), hooksLanded: 1 } }).includes('first-swing'));
+  const days = new Set(Array.from({ length: 10 }, (_, i) => `level-${i + 1}`));
+  assert.ok(ids({ ...base, finished: days }).includes('daylight'));
+  const cleanRun = { levelNumber: 6, falls: 0, retries: 0, reeled: false, hooks: 7, community: false, own: false };
+  const got = ids({ ...base, run: cleanRun });
+  for (const id of ['sure-footed', 'hands-off', 'minimalist']) assert.ok(got.includes(id), id);
+  assert.ok(!ids({ ...base, run: { ...cleanRun, falls: 1, reeled: true, hooks: 12 } }).some((id) => ['sure-footed', 'hands-off', 'minimalist'].includes(id)));
+  assert.ok(ids({ ...base, flags: { worldRecord: true } }).includes('world-record'));
+  assert.deepEqual(newAchievements({ ...base, stats: { ...defaultStats(), hooksLanded: 1 } }, { 'first-swing': '2026-11-19' }), [], 'already earned ones are not repeated');
+  const km = ACHIEVEMENTS.find((a) => a.id === 'km-1');
+  assert.deepEqual(km.progress({ ...base, stats: { ...defaultStats(), distance: 250.7 } }), [250, 1000]);
+});
