@@ -3,6 +3,7 @@ import { Editor, TOOLS } from './editor.js';
 import { encodeLevel, decodeLevel, newLevelId } from './custom.js';
 import { onlineEnabled, submitScore, getLeaderboard, getRecordGhost, cleanName, publishLevel, unpublishLevel, listLevels, voteLevel } from './online.js';
 import { GhostRecorder, encodeGhost, decodeGhost } from './ghost.js';
+import { StatsTracker, statsRows } from './stats.js';
 import { THEMES } from './themes.js';
 import { dailyFor, buildDaily, timeUntilNext, dailyStreak, dateKey } from './daily.js';
 import { TUTORIAL_STEPS, createTutorialFlags } from './tutorial.js';
@@ -47,6 +48,8 @@ const ui = {
   sens: $('sens'), sensVal: $('sens-val'), mute: $('mute'), musicVol: $('music-vol'), musicVal: $('music-val'),
   invert: $('invert'), fov: $('fov'), fovVal: $('fov-val'), sfxVol: $('sfx-vol'), sfxVal: $('sfx-val'),
   shake: $('shake'), speedfx: $('speedfx'), settingsBtn: $('settings-btn'), ghostMode: $('ghost-mode'),
+  profileBtn: $('profile-btn'), statsGrid: $('stats-grid'), tabStats: $('tab-stats'), tabAch: $('tab-ach'),
+  profileStats: $('profile-stats'), profileAch: $('profile-ach'),
   quality: $('quality'), showFps: $('show-fps'), fps: $('fps'), phoneNotice: $('phone-notice'), phoneContinue: $('phone-continue'),
   finish: $('finish'), finishTitle: $('finish-title'), finishTime: $('finish-time'),
   finishNote: $('finish-note'), finishHint: $('finish-hint'), finishMedal: $('finish-medal'),
@@ -109,6 +112,14 @@ function startAudio() {
   }
 }
 const progress = storage.getProgress();
+const stats = new StatsTracker(storage.getStats());
+function saveStats() {
+  if (!stats.dirty) return;
+  storage.setStats(stats.s);
+  stats.dirty = false;
+  stats.sinceSave = 0;
+}
+window.addEventListener('beforeunload', saveStats);
 if (!settings.playerName) {
   settings.playerName = `Player${1000 + Math.floor(Math.random() * 9000)}`;
   storage.setSettings(settings);
@@ -627,6 +638,7 @@ function updateCheckpointLabel() {
 
 function restart() {
   restartRun(run);
+  stats.resetPosition();
   recorder.reset();
   ui.finishBoard.classList.add('hidden');
   if (tut) {
@@ -695,12 +707,29 @@ async function submitAndShow(l, time, ghostPromise = null) {
   }
 }
 
+// --- Profile: stats and achievements -------------------------------------------
+
+function showProfileTab(tab) {
+  ui.tabStats.classList.toggle('on', tab === 'stats');
+  ui.tabAch.classList.toggle('on', tab === 'achievements');
+  ui.profileStats.classList.toggle('hidden', tab !== 'stats');
+  ui.profileAch.classList.toggle('hidden', tab !== 'achievements');
+  if (tab === 'stats') {
+    saveStats();
+    ui.statsGrid.innerHTML = statsRows(stats.s, medalCounts())
+      .map(([label, value]) => `<div class="stat"><span>${label}</span><b>${value}</b></div>`).join('');
+  }
+  if (tab === 'achievements') buildAchievements?.();
+}
+let buildAchievements = null;
+
 // --- Menu screens -------------------------------------------------------------
 
 function showScreen(name) {
   for (const s of ui.screens) s.classList.toggle('hidden', s.id !== `screen-${name}`);
   if (name === 'levels') buildLevelGrid();
   if (name === 'skins') buildSkinGrid();
+  if (name === 'profile') showProfileTab('stats');
   if (name === 'boards') {
     boardIndex = level?.daily ? -1 : level && !level.custom && !level.tutorial ? level.index : 0;
     ui.boardName.value = settings.playerName;
@@ -765,6 +794,7 @@ function buildLevelGrid() {
 }
 
 function setState(next) {
+  if (next === 'menu') saveStats();
   state = next;
   ui.menu.classList.toggle('hidden', state !== 'menu');
   ui.hud.classList.toggle('hidden', state === 'menu');
@@ -897,6 +927,7 @@ function handleEvents(events) {
         sound.start();
         break;
       case 'checkpoint': {
+        stats.add('checkpoints');
         splits[e.index] = run.time;
         renderer.setCheckpointReached(e.index);
         updateCheckpointLabel();
@@ -907,9 +938,15 @@ function handleEvents(events) {
         break;
       }
       case 'finish':
+        stats.add('finishes');
+        stats.add(level.custom ? 'customFinishes' : level.daily ? 'dailyFinishes' : level.tutorial ? 'finishes' : 'levelFinishes', level.tutorial ? 0 : 1);
         finishLevel(e);
+        stats.max('bestStreak', dailyStreak(progress.dailyDone || []));
+        saveStats();
         break;
       case 'fall':
+        stats.add('falls');
+        stats.resetPosition();
         sound.fall();
         renderer.addShake(0.4);
         showToast(run.checkpoint >= 0 ? 'Back to checkpoint' : 'Try again', '#ffffff');
@@ -923,12 +960,14 @@ function handleEvents(events) {
         if (e.speed > 15) renderer.addShake(Math.min(0.6, e.speed / 60));
         break;
       case 'attach':
+        stats.add('hooksLanded');
         if (run.player.hook) renderer.hookSparks(run.player.hook.point, run.player.hook.box);
         sound.attach();
         renderer.addShake(0.15);
         renderer.ropeSnap();
         break;
       case 'jump':
+        stats.add('jumps');
         sound.jump();
         if (tut) tut.flags.jumped = true;
         break;
@@ -951,6 +990,7 @@ input.handlers.hookDown = () => {
   if (state !== 'playing') return;
   renderer.fire();
   if (hook(run, currentAim())) {
+    stats.add('hooksFired');
     sound.hookFire();
   } else {
     sound.miss();
@@ -960,8 +1000,10 @@ input.handlers.hookUp = () => {
   const r = unhook(run);
   if (r.released) lastRelease = { ...r, velY: run.player.vel.y };
   if (tut && r.released && run.started && !run.player.grounded) tut.flags.flung = true;
-  if (r.hopped) sound.hop();
-  else if (r.released) sound.release();
+  if (r.hopped) {
+    stats.add('hops');
+    sound.hop();
+  } else if (r.released) sound.release();
 };
 input.handlers.altDown = () => {
   if (state === 'editor' && editor.remove(run.player)) sound.release();
@@ -1163,6 +1205,9 @@ renderer.baseFov = settings.fov;
 renderer.shakeEnabled = settings.shake;
 renderer.speedFx = settings.speedFx;
 ui.settingsBtn.addEventListener('click', () => showScreen('settings'));
+ui.profileBtn.addEventListener('click', () => showScreen('profile'));
+ui.tabStats.addEventListener('click', () => showProfileTab('stats'));
+ui.tabAch.addEventListener('click', () => showProfileTab('achievements'));
 ui.quality.value = settings.quality;
 renderer.setQuality(settings.quality);
 ui.quality.addEventListener('change', () => {
@@ -1238,6 +1283,7 @@ function frame(now) {
       move = bot ? botInput(bot) : input.movement();
       handleEvents(tick(run, move, FIXED_DT));
       if (run.started && !run.finished) recorder.record(run.time, p);
+      if (state === 'playing' && !run.finished && !bot) stats.step(p, FIXED_DT, run.time);
       accumulator -= FIXED_DT;
     }
     if (tut) {
@@ -1260,6 +1306,7 @@ function frame(now) {
   // Music builds up with speed (and a little while swinging).
   music?.setIntensity(state === 'playing' ? Math.min(1, Math.max(0, (speed - 4) / 40) + (p.hook ? 0.1 : 0)) : 0);
 
+  if (stats.sinceSave > 5) saveStats();
   if (toastTimer > 0 && (toastTimer -= dt) <= 0) ui.toast.classList.remove('show');
   if (splitTimer > 0 && (splitTimer -= dt) <= 0) ui.split.classList.remove('show');
 
@@ -1290,6 +1337,8 @@ window.__skyhook = {
   editor, openEditor, newCustomLevel, startTest, backToEditor, encodeLevel, decodeLevel,
   online: { submitScore, getLeaderboard },
   get music() { return music; },
+  get stats() { return stats.s; },
+  saveStats,
   get ghosts() { return { mine: myGhost, record: recordGhost, recorded: recorder.samples.length }; },
   Music,
 };

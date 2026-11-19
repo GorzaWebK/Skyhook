@@ -197,6 +197,12 @@ async function waitForServer() {
     await g(() => document.exitPointerLock());
     await page.waitForTimeout(500);
     check(await g(() => window.__skyhook.state === 'menu'), 'Esc (leaving pointer lock) pauses to the menu');
+    await page.click('#profile-btn');
+    const statText = await page.textContent('#stats-grid');
+    const lifetime = await g(() => window.__skyhook.stats);
+    check(await page.isVisible('#screen-profile') && lifetime.hooksFired >= 1 && lifetime.jumps >= 1 && lifetime.falls >= 1 && lifetime.distance > 5 && statText.includes('Hooks fired'),
+      `Profile shows your stats (hooks ${lifetime.hooksFired}, jumps ${lifetime.jumps}, falls ${lifetime.falls}, ${Math.round(lifetime.distance)} m)`);
+    await page.click('#screen-profile [data-back]');
 
     await g(() => localStorage.setItem('skyhook.best.level-1', JSON.stringify({ time: 42.5, splits: [10, 20] })));
     await page.reload();

@@ -494,3 +494,29 @@ test('daily streak counts consecutive days', () => {
   assert.equal(dailyStreak(['2026-11-23', '2026-11-24'], '2026-11-25'), 2, "today not played yet: yesterday's streak still counts");
   assert.equal(dailyStreak(['2026-11-20', '2026-11-24', '2026-11-25'], '2026-11-25'), 2, 'a missed day breaks it');
 });
+
+// --- Stats -------------------------------------------------------------------------
+import { StatsTracker, statsRows } from '../src/stats.js';
+
+test('stats: distance, swing distance, top speed and longest swing; respawns are ignored', () => {
+  const t = new StatsTracker(null);
+  const p = { pos: new Vector3(0, 0, 0), vel: new Vector3(0, 0, -30), hook: null };
+  t.step(p, 0.5, 0);
+  p.pos.set(0, 0, -2);
+  t.step(p, 0.5, 0.5);
+  p.hook = { point: new Vector3() };
+  p.pos.set(0, 0, -5);
+  t.step(p, 0.5, 1);
+  p.pos.set(0, 0, -8);
+  t.step(p, 0.5, 2.5);
+  p.pos.set(0, 0, 500); // respawn teleport
+  t.step(p, 0.5, 3);
+  assert.equal(t.s.distance, 8);
+  assert.equal(t.s.swung, 6);
+  assert.equal(t.s.topSpeed, 30);
+  assert.equal(t.s.longestSwing, 2);
+  assert.equal(t.s.playTime, 2.5);
+  const rows = statsRows({ ...t.s, hooksFired: 4, hooksLanded: 3 }, { gold: 1, silver: 3, bronze: 4 });
+  assert.ok(rows.find(([l]) => l === 'Hooks landed')[1] === '3 (75%)');
+  assert.ok(rows.find(([l]) => l === 'Medals')[1] === '1 gold · 2 silver · 1 bronze');
+});

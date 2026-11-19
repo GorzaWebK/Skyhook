@@ -31,6 +31,8 @@ export const storage = {
   // Best-run ghost recording per level (see ghost.js).
   getGhost: (id) => get(`ghost.${id}`, null),
   setGhost: (id, code) => set(`ghost.${id}`, code),
+  getStats: () => get('stats', null),
+  setStats: (s) => set('stats', s),
   getCustomLevels: () => get('custom', []),
   setCustomLevels: (list) => set('custom', list),
 };
