@@ -456,6 +456,12 @@ async function waitForServer() {
     await page.click('#play-btn');
     await page.waitForTimeout(1500);
     await page.screenshot({ path: 'test-results/level-30.png' });
+    const movers = await g(() => window.__skyhook.renderer.movers.length);
+    const before = await g(() => window.__skyhook.renderer.movers.map((m) => m.mesh.position.toArray()));
+    await g(() => { const p = window.__skyhook.run.player; p.pos.set(0, 6, -20); }); // leave the start: timer runs
+    await page.waitForTimeout(1500);
+    const moved = await g((b) => window.__skyhook.renderer.movers.some((m, i) => Math.hypot(...m.mesh.position.toArray().map((v, k) => v - b[i][k])) > 0.3), before);
+    check(movers > 5 && moved, `level 30 has moving anchors (${movers}) and they move once the timer starts`);
 
     // Arm + grapple gun are drawn; rope starts at the gun's muzzle.
     await page.goto(`${URL}?level=1`);

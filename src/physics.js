@@ -93,9 +93,12 @@ export function raycast(course, origin, dir, maxDist = TUNING.hookRange) {
 }
 
 function attachHook(player, point, box) {
+  if (box.motion) point = box.center.clone().add(player.pending?.local ?? point.clone().sub(box.center));
   const toAnchor = point.clone().sub(player.pos);
   const dist = toAnchor.length();
-  player.hook = { point, length: Math.max(TUNING.minRope, dist), box, time: 0 };
+  // local: where on the block the hook bit, so it can ride along with a
+  // moving anchor.
+  player.hook = { point, length: Math.max(TUNING.minRope, dist), box, time: 0, local: point.clone().sub(box.center) };
   player.pending = null;
   if (dist > 0.001) player.vel.addScaledVector(toAnchor.divideScalar(dist), TUNING.attachTug);
 }
@@ -108,7 +111,7 @@ export function fireHook(player, course, dir) {
   const hit = raycast(course, origin, dir);
   if (!hit || !isHookable(hit.box)) return null;
   player.hook = null;
-  player.pending = { point: hit.point, box: hit.box, origin, dir: dir.clone(), dist: hit.distance, travel: 0 };
+  player.pending = { point: hit.point, box: hit.box, origin, dir: dir.clone(), dist: hit.distance, travel: 0, local: hit.point.clone().sub(hit.box.center) };
   return hit;
 }
 
@@ -198,6 +201,9 @@ export function step(player, input, course, dt = FIXED_DT) {
       events.attached = true;
     }
   }
+
+  // A hook in a moving anchor rides along with it.
+  if (player.hook?.box?.motion) player.hook.point.copy(player.hook.box.center).add(player.hook.local);
 
   // The rope keeps the length it had when it caught, unless you reel in.
   let reeling = false;

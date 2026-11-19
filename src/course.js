@@ -41,6 +41,7 @@ export function levelParams(d) {
     sizeMax: lerp(7, 3.4),
     checkpointEvery: Math.round(lerp(5, 9)),
     blockerChance: Math.max(0, d - 0.3) * 0.9, // none before ~level 10
+    movingChance: d >= 0.5 ? 0.1 + (d - 0.5) * 1.3 : 0, // from level 16
   };
 }
 
@@ -98,6 +99,9 @@ export function generateLevel(index, seed, levelCount = 30) {
   const d = levelCount > 1 ? index / (levelCount - 1) : 0;
   const P = levelParams(d);
   const rand = mulberry32(seed);
+  // Separate random stream for motion, so adding moving anchors doesn't
+  // change the layout itself.
+  const moveRand = mulberry32(seed ^ 0x5bd1e995);
   const boxes = [];
   const anchors = [];
   const checkpoints = [];
@@ -116,6 +120,15 @@ export function generateLevel(index, seed, levelCount = 30) {
     const a = box(new Vector3(x, y, z), new Vector3(s, s * range(rand, 0.8, 1.3), s), 'anchor');
     boxes.push(a);
     anchors.push(a);
+    if (i > 0 && moveRand() < P.movingChance) {
+      a.motion = {
+        axis: moveRand() < 0.6 ? 'x' : 'y', // slide sideways or bob up and down
+        amp: range(moveRand, 3, 6.5),
+        period: range(moveRand, 3, 5.5),
+        phase: moveRand() * Math.PI * 2,
+      };
+      a.base = a.center.clone();
+    }
 
     // Smooth blocks you can't hook, sitting in the swing path between anchors.
     if (i > 0 && rand() < P.blockerChance) {
@@ -224,6 +237,19 @@ export function buildCustomCourse(data) {
     custom: true,
     theme: data.theme || 'day',
   };
+}
+
+// Move the moving anchors to where they are at time t (seconds of run time).
+export function updateMovers(course, t) {
+  for (const b of course.boxes) {
+    const m = b.motion;
+    if (!m) continue;
+    const offset = m.amp * Math.sin((t / m.period) * Math.PI * 2 + m.phase);
+    b.center.copy(b.base);
+    b.center[m.axis] += offset;
+    b.min.set(b.center.x - b.size.x / 2, b.center.y - b.size.y / 2, b.center.z - b.size.z / 2);
+    b.max.set(b.center.x + b.size.x / 2, b.center.y + b.size.y / 2, b.center.z + b.size.z / 2);
+  }
 }
 
 export function insideBox(p, b) {

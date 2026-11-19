@@ -384,3 +384,39 @@ test('sky themes: day, sunset and night by level group; custom levels keep a val
   assert.equal((await decodeLevel(await encodeLevel(data))).theme, 'storm', 'theme survives a share code');
   assert.equal(validateLevel({ ...data, theme: 'lava' }).theme, 'day', 'unknown themes fall back to day');
 });
+
+// --- Moving anchors ---------------------------------------------------------------
+import { updateMovers } from '../src/course.js';
+
+test('moving anchors: none before level 16, more in later levels', () => {
+  const movers = (n) => buildLevel(LEVELS[n - 1]).anchors.filter((a) => a.motion).length;
+  for (let n = 1; n <= 15; n++) assert.equal(movers(n), 0, `level ${n}`);
+  assert.ok(movers(30) > movers(16), `level 30 (${movers(30)}) has more than level 16 (${movers(16)})`);
+  assert.ok(movers(30) >= 8);
+});
+
+test('moving anchors wait until the timer starts, then move', () => {
+  const course = buildLevel(LEVELS[29]);
+  const run = createRun(course);
+  const a = course.anchors.find((x) => x.motion);
+  const start = a.center.clone();
+  for (let i = 0; i < 120; i++) tick(run, idle); // standing on the start platform
+  assert.ok(a.center.distanceTo(start) < 1e-9, 'still while on the start');
+  updateMovers(course, a.motion.period / 4);
+  assert.ok(a.center.distanceTo(start) > 1, 'moves once the clock runs');
+  assert.ok(Math.abs(a.min[a.motion.axis] - (a.center[a.motion.axis] - a.size[a.motion.axis] / 2)) < 1e-9, 'collision box moves with it');
+});
+
+test('a hook in a moving anchor rides along with it', () => {
+  const course = buildLevel(LEVELS[29]);
+  const a = course.anchors.find((x) => x.motion);
+  updateMovers(course, 0);
+  const p = createPlayer(course.spawn);
+  p.pos.set(a.center.x, a.center.y - 15, a.center.z + 5);
+  const eye = p.pos.clone().add(new Vector3(0, TUNING.eyeHeight, 0));
+  assert.ok(tryHook(p, course, a.center.clone().sub(eye).normalize()), 'hooked');
+  const offset = p.hook.point.clone().sub(a.center);
+  updateMovers(course, a.motion.period / 4);
+  step(p, idle, course);
+  assert.ok(p.hook.point.clone().sub(a.center).distanceTo(offset) < 1e-9, 'hook stays on the same spot of the block');
+});

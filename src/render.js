@@ -17,6 +17,7 @@ const KIND_STYLE = {
   finish: { color: '#ffd36b', tile: 4, emissive: '#5a4210' },
   pillar: { color: '#a9b3c7', tile: 8 },
   blocker: { color: '#3a4150', tile: 3, metal: true },
+  moving: { color: '#ffc43d', tile: 2.5, stripes: true, emissive: '#ffae00', emissiveIntensity: 0.55 },
   anchor: { color: '#ff9a4d', tile: 2.5, stripes: true, emissive: '#ff5a10', emissiveIntensity: 0.45 },
 };
 
@@ -293,11 +294,14 @@ export class Renderer {
         emissiveIntensity: style.emissive ? (style.emissiveIntensity ?? 0.6) : 0,
       });
     }
+    this.movers = [];
     for (const b of course.boxes) {
-      const style = KIND_STYLE[b.kind];
-      const mesh = new THREE.Mesh(boxGeometry(b.size, style.tile), materials[b.kind]);
+      const kind = b.motion ? 'moving' : b.kind; // moving anchors are amber
+      const style = KIND_STYLE[kind];
+      const mesh = new THREE.Mesh(boxGeometry(b.size, style.tile), materials[kind]);
       mesh.position.copy(b.center);
       this.courseGroup.add(mesh);
+      if (b.motion) this.movers.push({ box: b, mesh });
     }
 
     this.checkpointFx = course.checkpoints.map((cp) => {
@@ -444,6 +448,9 @@ export class Renderer {
       layer.tex.offset.x = this.time * 0.002 * layer.speed;
       layer.tex.offset.y = this.time * 0.001 * layer.speed;
     }
+
+    // Moving anchors: meshes follow the physics boxes.
+    for (const m of this.movers || []) m.mesh.position.copy(m.box.center);
 
     // Effects.
     this.sparks.update(dt);

@@ -1,10 +1,11 @@
-import { insideBox } from './course.js';
+import { insideBox, updateMovers } from './course.js';
 import { createPlayer, resetPlayer, step, fireHook, releaseHook, FIXED_DT, TUNING } from './physics.js';
 
 // One attempt at a course: the timer, checkpoints, finish and respawning.
 // No rendering here, so it runs the same in the browser and in Node tests.
 
 export function createRun(course) {
+  updateMovers(course, 0);
   return {
     course,
     player: createPlayer(course.spawn),
@@ -17,6 +18,7 @@ export function createRun(course) {
 }
 
 export function restartRun(run) {
+  updateMovers(run.course, 0);
   resetPlayer(run.player, run.course.spawn);
   run.started = false;
   run.finished = false;
@@ -50,6 +52,8 @@ export function tick(run, input, dt = FIXED_DT) {
   const p = run.player;
   const course = run.course;
 
+  // Moving anchors follow the run clock (they wait while you're on the start).
+  updateMovers(course, run.time);
   const stepEvents = step(p, run.finished ? { forward: 0, right: 0 } : input, course, dt);
   if (stepEvents.landed > 4) events.push({ type: 'land', speed: stepEvents.landed });
   if (stepEvents.jumped) events.push({ type: 'jump' });
