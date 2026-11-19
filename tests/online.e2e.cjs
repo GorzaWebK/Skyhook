@@ -225,9 +225,21 @@ async function browserTests() {
     await p2.waitForTimeout(1000);
     const cs = await p2.evaluate(() => ({ mode: window.__skyhook.mode, community: window.__skyhook.level.community, theme: window.__skyhook.renderer.themeId }));
     check(cs.mode === 'custom' && cs.community && cs.theme === 'sunset', 'a community level can be played (with its sky)');
-    await p2.evaluate(() => window.__skyhook.run.player.pos.copy(window.__skyhook.course.finish.trigger.center));
+    // (a realistic clock: the rules reject times under 3 s as impossible)
+    await p2.evaluate(() => { const s = window.__skyhook; s.run.started = true; s.run.time = 14.2; s.run.player.pos.copy(s.course.finish.trigger.center); });
     await p2.waitForTimeout(600);
     check((await p2.textContent('#finish-title')).includes('Sky Steps') && !(await p2.evaluate(() => (JSON.parse(localStorage.getItem('skyhook.custom') || '[]')).length)), 'finishing it works and does not add it to your own levels');
+    let cBoard = '';
+    for (let i = 0; i < 40 && !cBoard.includes('#1'); i++) { await p2.waitForTimeout(250); cBoard = await p2.textContent('#finish-board'); }
+    check(cBoard.includes('#1') && cBoard.includes('Rival'), `finishing a community level puts your time on its own leaderboard ("${cBoard.slice(0, 50)}...")`);
+    await p2.evaluate(() => document.exitPointerLock());
+    await p2.waitForTimeout(300);
+    await p2.click('#community-btn');
+    for (let i = 0; i < 40 && !(await p2.isVisible('.ml-row [data-act="top"]')); i++) await p2.waitForTimeout(250);
+    await p2.click('.ml-row [data-act="top"]');
+    let topList = '';
+    for (let i = 0; i < 40 && !topList.includes('Rival'); i++) { await p2.waitForTimeout(250); topList = await p2.textContent('.ml-board'); }
+    check(topList.includes('Rival'), 'the community list shows each level\'s top times');
     await p2.screenshot({ path: 'test-results/community-finish.png' });
 
     // Owner removes it.

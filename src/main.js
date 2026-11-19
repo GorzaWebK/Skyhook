@@ -282,7 +282,12 @@ function refreshGhosts() {
 }
 
 function isOnlineBoard(def) {
-  return !def.custom && !def.tutorial;
+  return def.community || (!def.custom && !def.tutorial);
+}
+
+// The online leaderboard id for a level (community levels have their own).
+function onlineId(def) {
+  return def.community ? `community-${def.communityId}` : def.id;
 }
 
 async function loadGhosts(def) {
@@ -303,7 +308,7 @@ async function loadGhosts(def) {
   refreshGhosts();
   if (onlineEnabled && isOnlineBoard(def) && settings.ghost !== 'off') {
     try {
-      const rec = await getRecordGhost(def.id);
+      const rec = await getRecordGhost(onlineId(def));
       if (rec && token === ghostToken) {
         recordGhost = { samples: await decodeGhost(rec.code), name: rec.name, you: rec.you };
         refreshGhosts();
@@ -381,7 +386,7 @@ function loadLevel(index) {
 const editor = new Editor(renderer);
 
 function customDef(lvl) {
-  return { id: `custom-${lvl.id}`, custom: true, community: !!lvl.community, data: lvl.data, name: lvl.data.name, index: -1, number: 0 };
+  return { id: `custom-${lvl.id}`, custom: true, community: !!lvl.community, communityId: lvl.communityId, data: lvl.data, name: lvl.data.name, index: -1, number: 0 };
 }
 
 function saveCustom(lvl) {
@@ -586,13 +591,23 @@ function renderCommunity() {
     row.innerHTML = `
       <div class="ml-info"><div class="ml-name"></div><div class="ml-meta"></div></div>
       <button class="btn vote${l.voted ? ' on' : ''}" data-act="vote" ${l.mine ? 'disabled title="Your level"' : ''}>▲ ${l.votes}</button>
+      <button class="btn" data-act="top" title="Top times">🏆</button>
       <button class="btn" data-act="play">Play</button>
-      ${l.mine ? '<button class="btn" data-act="remove">Remove</button>' : ''}`;
+      ${l.mine ? '<button class="btn" data-act="remove">Remove</button>' : ''}
+      <div class="ml-board hidden"></div>`;
     row.querySelector('.ml-name').textContent = l.name; // user text: never as HTML
     row.querySelector('.ml-meta').textContent = `by ${l.author}${l.mine ? ' (you)' : ''} · ${l.blocks} blocks${best ? ` · your best ${formatTime(best.time)}` : ''}`;
     row.addEventListener('click', async (e) => {
       const act = e.target.dataset?.act;
       try {
+        if (act === 'top') {
+          const panel = row.querySelector('.ml-board');
+          panel.classList.toggle('hidden');
+          if (!panel.classList.contains('hidden')) {
+            panel.innerHTML = '<div class="board-empty">Loading...</div>';
+            panel.innerHTML = boardRowsHtml(await getLeaderboard(`community-${l.id}`, 5), 5);
+          }
+        }
         if (act === 'play') {
           const data = await decodeLevel(l.code);
           playCustom({ id: `community-${l.id}`, community: true, communityId: l.id, own: l.mine, voted: l.voted, tested: false, data });
@@ -817,8 +832,8 @@ async function submitAndShow(l, time, ghostPromise = null) {
   ui.finishBoard.classList.remove('hidden');
   ui.finishBoard.innerHTML = '<div class="board-title">Online leaderboard</div><div class="board-empty">Saving your time...</div>';
   try {
-    await submitScore(l.id, settings.playerName, time, ghostPromise ? await ghostPromise : null);
-    const board = await getLeaderboard(l.id, 5);
+    await submitScore(onlineId(l), settings.playerName, time, ghostPromise ? await ghostPromise : null);
+    const board = await getLeaderboard(onlineId(l), 5);
     if (level !== l) return;
     const rank = board.me ? `You're <b>#${board.me.rank}</b> in the world` : '';
     if (board.me?.rank === 1) checkAchievements({ flags: { worldRecord: true } });
@@ -1101,12 +1116,14 @@ function finishCustom(e) {
   const skinsBefore = unlockedSkinIds();
   const isRecord = !best || e.time < best.time;
   const beatGhost = isRecord && !!myGhost;
+  let ghostSaveCustom = null;
   if (isRecord) {
     best = { time: e.time, splits: [...splits] };
     storage.setBest(level.id, best);
     refreshBest();
-    saveBestGhost(level.id);
+    ghostSaveCustom = saveBestGhost(level.id);
   }
+  if (level.community) submitAndShow(level, e.time, ghostSaveCustom);
   customLevel.tested = true;
   saveCustom(customLevel);
   // Finishing a level you built yourself (with a real course in it) unlocks
