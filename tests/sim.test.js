@@ -261,7 +261,7 @@ test('gun skins unlock from progress', () => {
   const some = { ...none, medals: { gold: 0, silver: 5, bronze: 5 } };
   assert.ok(unlocked(some).includes('bronze') && unlocked(some).includes('cobalt'));
   assert.ok(!unlocked(some).includes('crimson'));
-  const all = { medals: { gold: 30, silver: 30, bronze: 30 }, tutorialDone: true, editorFinished: true };
+  const all = { medals: { gold: 30, silver: 30, bronze: 30 }, tutorialDone: true, editorFinished: true, achieved: { 'week-warrior': 1, ghostbuster: 1, 'km-10': 1, 'world-record': 1 } };
   assert.equal(unlocked(all).length, SKINS.length);
   assert.equal(skinRequirement(SKINS.find((sk) => sk.id === 'gilded'), some), 'Earn 10 gold medals (0 / 10)');
   assert.equal(new Set(SKINS.map((sk) => sk.id)).size, SKINS.length, 'unique ids');
@@ -542,4 +542,18 @@ test('achievements: 30 unique, and they unlock from the right situations', () =>
   assert.deepEqual(newAchievements({ ...base, stats: { ...defaultStats(), hooksLanded: 1 } }, { 'first-swing': '2026-11-19' }), [], 'already earned ones are not repeated');
   const km = ACHIEVEMENTS.find((a) => a.id === 'km-1');
   assert.deepEqual(km.progress({ ...base, stats: { ...defaultStats(), distance: 250.7 } }), [250, 1000]);
+});
+
+// --- Cosmetics -----------------------------------------------------------------------
+import { ROPES, TRAILS, isCosmeticUnlocked } from '../src/cosmetics.js';
+
+test('rope colours and hook trails unlock from achievements that exist', () => {
+  const ids = new Set(ACHIEVEMENTS.map((a) => a.id));
+  for (const item of [...ROPES, ...TRAILS, ...SKINS.filter((s) => s.req.type === 'achievement')]) {
+    if (item.req.type === 'achievement') assert.ok(ids.has(item.req.id), `${item.name} needs a real achievement (${item.req.id})`);
+  }
+  assert.deepEqual(ROPES.filter((r) => isCosmeticUnlocked(r, {})).map((r) => r.id), ['black', 'white']);
+  assert.deepEqual(TRAILS.filter((t) => isCosmeticUnlocked(t, {})).map((t) => t.id), ['none']);
+  assert.ok(isCosmeticUnlocked(ROPES.find((r) => r.id === 'gold'), { 'gold-10': '2026-11-19' }));
+  assert.equal(SKINS.length, 13);
 });

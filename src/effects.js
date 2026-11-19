@@ -174,3 +174,80 @@ export function makeSpeedLines() {
   mesh.renderOrder = -10;
   return mesh;
 }
+
+// --- Hook trail -----------------------------------------------------------------
+// A short trail of dots behind the flying hook (cosmetic, see cosmetics.js).
+export class HookTrail {
+  constructor(scene, count = 48) {
+    this.count = count;
+    this.pos = new Float32Array(count * 3);
+    this.col = new Float32Array(count * 3);
+    this.age = new Float32Array(count).fill(99);
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(this.pos, 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(this.col, 3));
+    geo.setAttribute('age', new THREE.BufferAttribute(this.age, 1));
+    this.material = new THREE.ShaderMaterial({
+      transparent: true,
+      depthWrite: false,
+      uniforms: { size: { value: 7 }, life: { value: 0.45 } },
+      vertexShader: `
+        attribute float age; attribute vec3 color;
+        uniform float size; uniform float life;
+        varying float vA; varying vec3 vC;
+        void main() {
+          vA = clamp(1.0 - age / life, 0.0, 1.0);
+          vC = color;
+          gl_PointSize = size * (0.35 + 0.65 * vA);
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }`,
+      fragmentShader: `
+        varying float vA; varying vec3 vC;
+        void main() {
+          float d = length(gl_PointCoord - 0.5);
+          if (d > 0.5 || vA <= 0.0) discard;
+          gl_FragColor = vec4(vC, vA * smoothstep(0.5, 0.15, d));
+        }`,
+    });
+    this.points = new THREE.Points(geo, this.material);
+    this.points.frustumCulled = false;
+    scene.add(this.points);
+    this.next = 0;
+    this.style = null;
+    this.hue = 0;
+  }
+
+  setStyle(style) {
+    this.style = style && style.id !== 'none' ? style : null;
+    if (this.style) this.material.uniforms.size.value = style.size || 7;
+  }
+
+  emit(p) {
+    if (!this.style) return;
+    const s = this.style;
+    const i = this.next++ % this.count;
+    const j = s.jitter || 0;
+    this.pos[i * 3] = p.x + (Math.random() - 0.5) * j;
+    this.pos[i * 3 + 1] = p.y + (Math.random() - 0.5) * j;
+    this.pos[i * 3 + 2] = p.z + (Math.random() - 0.5) * j;
+    const c = new THREE.Color();
+    if (s.rainbow) {
+      this.hue = (this.hue + 0.035) % 1;
+      c.setHSL(this.hue, 0.9, 0.6);
+    } else {
+      c.set(s.colors[Math.floor(Math.random() * s.colors.length)]);
+    }
+    this.col.set([c.r, c.g, c.b], i * 3);
+    this.age[i] = 0;
+  }
+
+  update(dt) {
+    for (let i = 0; i < this.count; i++) this.age[i] += dt;
+    const g = this.points.geometry.attributes;
+    g.position.needsUpdate = g.color.needsUpdate = g.age.needsUpdate = true;
+  }
+
+  get active() {
+    return this.age.some((a) => a < 0.45);
+  }
+}

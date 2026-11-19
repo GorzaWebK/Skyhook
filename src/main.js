@@ -17,7 +17,8 @@ import { Sound } from './audio.js';
 import { Music } from './music.js';
 import { Input } from './input.js';
 import { storage } from './storage.js';
-import { SKINS, getSkin, isSkinUnlocked, skinRequirement } from './skins.js';
+import { SKINS, getSkin, isSkinUnlocked, skinRequirement, achievementName } from './skins.js';
+import { ROPES, TRAILS, getRope, getTrail, isCosmeticUnlocked } from './cosmetics.js';
 import { applySkin } from './viewmodel.js';
 
 const params = new URLSearchParams(location.search);
@@ -43,6 +44,7 @@ const ui = {
   boardsBtn: $('boards-btn'), boardPrev: $('board-prev'), boardNext: $('board-next'), boardLevel: $('board-level'),
   boardName: $('board-name'), boardList: $('board-list'), finishBoard: $('finish-board'),
   epName: $('ep-name'), epTools: $('ep-tools'), epSize: $('ep-size'), epStatus: $('ep-status'), skinsBtn: $('skins-btn'), skinGrid: $('skin-grid'),
+  ropeGrid: $('rope-grid'), trailGrid: $('trail-grid'),
   tutorial: $('tutorial'), tutStep: $('tut-step'), tutText: $('tut-text'),
   courseName: $('course-name'), menuBest: $('menu-best'),
   levelGrid: $('level-grid'), levelProgress: $('level-progress'),
@@ -84,7 +86,7 @@ export function medalCounts() {
 }
 
 function skinStats() {
-  return { medals: medalCounts(), tutorialDone: !!progress.tutorialDone, editorFinished: !!progress.editorFinished };
+  return { medals: medalCounts(), tutorialDone: !!progress.tutorialDone, editorFinished: !!progress.editorFinished, achieved: storage.getAchievements() };
 }
 
 function unlockedSkinIds() {
@@ -135,6 +137,66 @@ function equipSkin(id) {
 }
 equipSkin(unlockedSkinIds().has(settings.skin) ? settings.skin : 'standard');
 
+function equipRope(id) {
+  settings.rope = getRope(id).id;
+  storage.setSettings(settings);
+  renderer.setRopeStyle(getRope(settings.rope));
+}
+function equipTrail(id) {
+  settings.trail = getTrail(id).id;
+  storage.setSettings(settings);
+  renderer.setTrailStyle(getTrail(settings.trail));
+}
+{
+  const got = storage.getAchievements();
+  equipRope(isCosmeticUnlocked(getRope(settings.rope), got) ? settings.rope : 'black');
+  equipTrail(isCosmeticUnlocked(getTrail(settings.trail), got) ? settings.trail : 'none');
+}
+
+// Rope colour and hook trail cards on the Gun page.
+function buildCosmeticGrid(grid, items, current, equip, swatch) {
+  const got = storage.getAchievements();
+  grid.innerHTML = '';
+  for (const item of items) {
+    const unlocked = isCosmeticUnlocked(item, got);
+    const card = document.createElement('button');
+    card.className = `skin-card${unlocked ? '' : ' locked'}${current() === item.id ? ' equipped' : ''}`;
+    card.disabled = !unlocked;
+    card.dataset.item = item.id;
+    card.innerHTML = `${swatch(item)}<span class="skin-name">${item.name}</span>
+      <span class="skin-status">${current() === item.id ? 'Equipped' : unlocked ? 'Click to equip' : `Achievement: ${achievementName(item.req.id)}`}</span>`;
+    card.addEventListener('click', () => {
+      if (!isCosmeticUnlocked(item, storage.getAchievements())) return;
+      equip(item.id);
+      buildGunPage();
+    });
+    grid.appendChild(card);
+  }
+}
+
+const ropeSwatch = (r) => `<span class="skin-swatch rope-swatch"><i style="background:${r.rainbow ? 'linear-gradient(90deg,#f33,#fc3,#3f6,#3cf,#93f)' : r.color}"></i></span>`;
+const trailSwatch = (t) => {
+  if (t.id === 'none') return '<span class="skin-swatch trail-swatch"><b>—</b></span>';
+  const cols = t.rainbow ? ['#f33', '#fc3', '#3f6', '#3cf', '#93f'] : t.colors;
+  const dots = Array.from({ length: 9 }, (_, i) => `<i style="left:${8 + i * 9}%;width:${4 + i}px;height:${4 + i}px;background:${cols[i % cols.length]};opacity:${0.25 + i * 0.08}"></i>`).join('');
+  return `<span class="skin-swatch trail-swatch">${dots}</span>`;
+};
+
+function buildGunPage() {
+  buildSkinGrid();
+  buildCosmeticGrid(ui.ropeGrid, ROPES, () => settings.rope, equipRope, ropeSwatch);
+  buildCosmeticGrid(ui.trailGrid, TRAILS, () => settings.trail, equipTrail, trailSwatch);
+}
+
+// What an achievement unlocks (for the pop-up).
+function rewardsFor(achId) {
+  return [
+    ...SKINS.filter((x) => x.req.type === 'achievement' && x.req.id === achId).map((x) => `${x.name} gun`),
+    ...ROPES.filter((x) => x.req.id === achId).map((x) => `${x.name} rope`),
+    ...TRAILS.filter((x) => x.req.id === achId).map((x) => `${x.name} trail`),
+  ];
+}
+
 function buildSkinGrid() {
   const stats = skinStats();
   ui.skinGrid.innerHTML = '';
@@ -155,7 +217,7 @@ function buildSkinGrid() {
     card.addEventListener('click', () => {
       if (!isSkinUnlocked(sk, skinStats())) return;
       equipSkin(sk.id);
-      buildSkinGrid();
+      buildGunPage();
     });
     ui.skinGrid.appendChild(card);
   }
@@ -771,7 +833,8 @@ function updatePopups(dt) {
   }
   const a = popupQueue.shift();
   if (!a) return;
-  ui.achPopup.innerHTML = `<span class="ap-icon">${a.icon}</span><div><div class="ap-title">Achievement unlocked</div><div class="ap-name">${a.name}</div><div class="ap-desc">${a.desc}</div></div>`;
+  const rewards = rewardsFor(a.id);
+  ui.achPopup.innerHTML = `<span class="ap-icon">${a.icon}</span><div><div class="ap-title">Achievement unlocked</div><div class="ap-name">${a.name}</div><div class="ap-desc">${a.desc}</div>${rewards.length ? `<div class="ap-reward">Unlocks: ${rewards.join(', ')}</div>` : ''}</div>`;
   ui.achPopup.classList.add('show');
   sound.achievement();
   popupTimer = 3.6;
@@ -797,7 +860,7 @@ buildAchievements = () => {
 function showScreen(name) {
   for (const s of ui.screens) s.classList.toggle('hidden', s.id !== `screen-${name}`);
   if (name === 'levels') buildLevelGrid();
-  if (name === 'skins') buildSkinGrid();
+  if (name === 'skins') buildGunPage();
   if (name === 'profile') showProfileTab('stats');
   if (name === 'boards') {
     boardIndex = level?.daily ? -1 : level && !level.custom && !level.tutorial ? level.index : 0;
@@ -1419,6 +1482,7 @@ window.__skyhook = {
   get lastRelease() { return lastRelease; },
   renderer, restart, loadLevel, loadTutorial, playDaily, dailyFor, formatTime, TUNING, medalCounts,
   get skin() { return settings.skin; },
+  get cosmetics() { return { rope: settings.rope, trail: settings.trail }; },
   get mode() { return mode; },
   get communityLevels() { return communityLevels; },
   get customLevel() { return customLevel; },

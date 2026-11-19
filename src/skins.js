@@ -1,3 +1,5 @@
+import { ACHIEVEMENTS } from './achievements.js';
+
 // Gun skins: colour sets for the grapple gun, unlocked by progress.
 // body = main casing, dark = grip/barrel/back, accent = top rail and claw tip,
 // glow = the spool ring.
@@ -10,18 +12,23 @@ export const SKINS = [
   { id: 'toxic', name: 'Toxic', colors: { body: '#46552f', dark: '#1b2113', accent: '#b6ff3d', glow: '#b6ff3d' }, req: { type: 'medals', tier: 'silver', count: 15 } },
   { id: 'architect', name: 'Architect', colors: { body: '#e6e2d6', dark: '#56606e', accent: '#3d8bff', glow: '#3dd5ff' }, req: { type: 'editor' } },
   { id: 'gilded', name: 'Gilded', colors: { body: '#d9a521', dark: '#3b2b06', accent: '#fff1b8', glow: '#ffe066' }, req: { type: 'medals', tier: 'gold', count: 10 } },
+  { id: 'dawn', name: 'Daybreak', colors: { body: '#ff9d6b', dark: '#3d2238', accent: '#ffe08a', glow: '#ff7ab8' }, req: { type: 'achievement', id: 'week-warrior' } },
+  { id: 'spectre', name: 'Spectre', colors: { body: '#cfe8ee', dark: '#38515a', accent: '#ffffff', glow: '#8ff7ff' }, req: { type: 'achievement', id: 'ghostbuster' } },
+  { id: 'voyager', name: 'Voyager', colors: { body: '#2f6b5a', dark: '#14261f', accent: '#f2d27a', glow: '#62ffc8' }, req: { type: 'achievement', id: 'km-10' } },
+  { id: 'champion', name: 'Champion', colors: { body: '#1a1a1f', dark: '#0b0b0d', accent: '#ffc928', glow: '#ffc928' }, req: { type: 'achievement', id: 'world-record' } },
   { id: 'phantom', name: 'Phantom Chrome', colors: { body: '#d3dbe6', dark: '#11141a', accent: '#c78bff', glow: '#c78bff' }, req: { type: 'medals', tier: 'gold', count: 30 } },
 ];
 
 const TIER_WORD = { bronze: 'medals', silver: 'silver or better medals', gold: 'gold medals' };
 
-// stats: { medals: { gold, silver, bronze }, tutorialDone, editorFinished }
+// stats: { medals: { gold, silver, bronze }, tutorialDone, editorFinished, achieved }
 // (silver counts golds too, bronze counts every medal.)
 export function isSkinUnlocked(skin, stats) {
   const r = skin.req;
   if (r.type === 'free') return true;
   if (r.type === 'tutorial') return !!stats.tutorialDone;
   if (r.type === 'editor') return !!stats.editorFinished;
+  if (r.type === 'achievement') return !!stats.achieved?.[r.id];
   return stats.medals[r.tier] >= r.count;
 }
 
@@ -30,7 +37,12 @@ export function skinRequirement(skin, stats) {
   if (r.type === 'free') return 'Always available';
   if (r.type === 'tutorial') return 'Finish the tutorial';
   if (r.type === 'editor') return 'Finish a level you built in the editor';
+  if (r.type === 'achievement') return `Achievement: ${achievementName(r.id)}`;
   return `Earn ${r.count} ${TIER_WORD[r.tier]} (${Math.min(r.count, stats.medals[r.tier])} / ${r.count})`;
+}
+
+export function achievementName(id) {
+  return ACHIEVEMENTS.find((a) => a.id === id)?.name ?? id;
 }
 
 export function getSkin(id) {

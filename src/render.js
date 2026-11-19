@@ -4,7 +4,7 @@ import { eyePosition } from './physics.js';
 import { ViewModel, makeClaw } from './viewmodel.js';
 import { Rope } from './rope.js';
 import { THEMES } from './themes.js';
-import { Sparks, Rain, makeSpeedLines } from './effects.js';
+import { Sparks, Rain, makeSpeedLines, HookTrail } from './effects.js';
 import { faceNormal } from './editor.js';
 import { ghostAt } from './ghost.js';
 
@@ -159,6 +159,9 @@ export class Renderer {
     this.addTargetMarker();
     this.viewModel = new ViewModel();
     this.sparks = new Sparks(this.scene);
+    this.trail = new HookTrail(this.scene);
+    this.ropeRainbow = false;
+    this.lastHead = null;
     this.rain = new Rain(this.scene);
     this.fxScene = new THREE.Scene();
     this.speedLines = makeSpeedLines();
@@ -289,6 +292,16 @@ export class Renderer {
     }
   }
 
+  // Cosmetics: rope colour (or rainbow) and hook trail style.
+  setRopeStyle(rope) {
+    this.ropeRainbow = !!rope.rainbow;
+    this.rope.mesh.material.color.set(rope.color);
+  }
+
+  setTrailStyle(trail) {
+    this.trail.setStyle(trail);
+  }
+
   // Sparks where the hook bites into a block.
   hookSparks(point, box) {
     const n = box ? faceNormal(box, point) : new THREE.Vector3(0, 1, 0);
@@ -416,6 +429,7 @@ export class Renderer {
     const pd = player.pending;
     const hook = player.hook;
     if (!pd && !hook) {
+      this.lastHead = null;
       this.rope.hide();
       this.hookHead.visible = false;
       return;
@@ -457,6 +471,15 @@ export class Renderer {
       if (sag) out.y -= sag * bell;
     }, cam.position);
 
+    // Hook trail (cosmetic): dots along the hook's path while it flies.
+    if (pd) {
+      const from = this.lastHead || E;
+      const steps = Math.min(6, Math.max(1, Math.ceil(from.distanceTo(E) / 1.5)));
+      for (let i = 1; i <= steps; i++) this.trail.emit(from.clone().lerp(E, i / steps));
+      this.lastHead = E.clone();
+    } else {
+      this.lastHead = null;
+    }
     this.hookHead.visible = true;
     this.hookHead.position.copy(E);
     this.hookHead.lookAt(E.clone().sub(dirN)); // claw points along -Z
@@ -528,6 +551,8 @@ export class Renderer {
 
     // Effects.
     this.sparks.update(dt);
+    this.trail.update(dt);
+    if (this.ropeRainbow) this.rope.mesh.material.color.setHSL((this.time * 0.25) % 1, 0.85, 0.55);
     this.rain.update(dt, cam.position, this.time);
     if (this.theme.lightning) {
       this.nextLightning -= dt;

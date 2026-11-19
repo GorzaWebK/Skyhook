@@ -331,8 +331,8 @@ async function waitForServer() {
     await page.waitForTimeout(1000);
     await page.click('#skins-btn');
     check(await page.isVisible('#screen-skins'), 'Gun button opens the gun skins page');
-    const cards = await page.$$eval('.skin-card', (els) => els.map((e) => ({ id: e.dataset.skin, locked: e.disabled, text: e.textContent })));
-    check(cards.length === 9, `9 gun skins listed (${cards.length})`);
+    const cards = await page.$$eval('#skin-grid .skin-card', (els) => els.map((e) => ({ id: e.dataset.skin, locked: e.disabled, text: e.textContent })));
+    check(cards.length === 13, `13 gun skins listed (${cards.length})`);
     const open = cards.filter((c) => !c.locked).map((c) => c.id).sort().join(',');
     check(open === 'bronze,cobalt,rookie,standard', `skins unlocked by 5 golds + tutorial: ${open}`);
     check(cards.find((c) => c.id === 'gilded').text.includes('5 / 10'), 'locked skins show progress towards unlocking');
@@ -344,6 +344,34 @@ async function waitForServer() {
     await page.reload();
     await page.waitForTimeout(1000);
     check(await g(() => window.__skyhook.skin === 'cobalt'), 'equipped skin is remembered after a reload');
+    // Rope colours and hook trails (First Swing is earned by now: the orange rope).
+    await page.click('#skins-btn');
+    const ropes = await page.$$eval('#rope-grid .skin-card', (els) => els.map((e) => ({ id: e.dataset.item, locked: e.disabled })));
+    check(ropes.length === 9 && !ropes.find((r) => r.id === 'orange').locked && ropes.find((r) => r.id === 'rainbow').locked, 'rope colours: free and achievement ones open, the rest locked');
+    await page.click('#rope-grid .skin-card[data-item="orange"]');
+    check(await g(() => window.__skyhook.cosmetics.rope === 'orange' && window.__skyhook.renderer.rope.mesh.material.color.getHexString() === 'ff7a1a'), 'equipping a rope colour recolours the rope');
+    const trails = await page.$$eval('#trail-grid .skin-card', (els) => els.length);
+    check(trails === 7, `hook trails are listed (${trails})`);
+    await g(() => { const a = JSON.parse(localStorage.getItem('skyhook.achievements')); a['km-1'] = '2026-11-19'; localStorage.setItem('skyhook.achievements', JSON.stringify(a)); });
+    await page.click('#screen-skins [data-back]');
+    await page.click('#skins-btn');
+    await page.click('#trail-grid .skin-card[data-item="comet"]');
+    check(await g(() => window.__skyhook.cosmetics.trail === 'comet'), 'an unlocked hook trail can be equipped');
+    await page.screenshot({ path: 'test-results/gun-page.png' });
+    await page.click('#screen-skins [data-back]');
+    await page.click('#play-btn');
+    await page.waitForTimeout(500);
+    await g(() => {
+      const s = window.__skyhook; const p = s.run.player; const a = s.course.anchors[0].center;
+      const ex = a.x - p.pos.x, ey = a.y - (p.pos.y + 0.35), ez = a.z - p.pos.z;
+      p.yaw = Math.atan2(-ex, -ez); p.pitch = Math.atan2(ey, Math.hypot(ex, ez)); s.TUNING.hookSpeed = 25;
+    });
+    await page.mouse.down();
+    await page.waitForTimeout(500);
+    check(await g(() => window.__skyhook.renderer.trail.active), 'the hook trail shows while the hook flies');
+    await page.mouse.up();
+    await g(() => { window.__skyhook.TUNING.hookSpeed = 250; document.exitPointerLock(); });
+    await page.waitForTimeout(300);
 
     // Music: render it offline and measure it (we can't listen in a test).
     const audio = await g(async () => {

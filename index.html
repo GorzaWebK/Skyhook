@@ -244,6 +244,13 @@
       .ach-text em { font-style: normal; font-size: 11px; color: var(--gold); }
       .ach-bar { display: block; height: 5px; border-radius: 3px; background: rgba(255,255,255,0.12); overflow: hidden; margin-top: 3px; }
       .ach-bar i { display: block; height: 100%; background: var(--accent); }
+      .gun-scroll { max-height: 60vh; overflow-y: auto; padding-right: 4px; }
+      .gun-h { margin: 12px 0 4px; font-size: 14px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); }
+      .cos-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+      .rope-swatch i { position: absolute; left: 8%; right: 8%; top: 46%; height: 4px; border-radius: 2px; transform: rotate(-12deg); }
+      .trail-swatch i { position: absolute; top: 50%; transform: translateY(-50%); border-radius: 50%; }
+      .trail-swatch b { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); }
+      .ap-reward { font-size: 12px; color: #7dff9a; margin-top: 2px; }
       .footer { margin-top: 16px; font-size: 12px; color: var(--muted); }
       .hud-right { position: absolute; top: 18px; right: 22px; text-align: right; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.45); }
       #level-label { font-size: 15px; font-weight: 700; }
@@ -402,8 +409,15 @@
 
  <div id="screen-skins" class="card screen side hidden">
         <h2>Grapple gun</h2>
-        <p class="sub">Pick a look for your gun. Earn medals to unlock more.</p>
-        <div id="skin-grid"></div>
+        <p class="sub">Pick your look. Earn medals and achievements to unlock more.</p>
+        <div class="gun-scroll">
+          <h3 class="gun-h">Gun skin</h3>
+          <div id="skin-grid"></div>
+          <h3 class="gun-h">Rope colour</h3>
+          <div id="rope-grid" class="cos-grid"></div>
+          <h3 class="gun-h">Hook trail</h3>
+          <div id="trail-grid" class="cos-grid"></div>
+        </div>
         <button class="btn" data-back>Back</button>
       </div>
 

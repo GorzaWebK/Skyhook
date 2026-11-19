@@ -43,6 +43,7 @@ The full controls list sits behind the **Controls** button on the main menu.
   - from level 16, **moving anchors** (amber instead of orange) that slide sideways or bob up and down, with more of them on later levels. A hook stays stuck to the spot it bit, and the anchors only start moving when your timer starts, so every run gets the same timing.
 - **Medals:** Every level has gold, silver and bronze target times. Gold is the autopilot's own time, silver is 30% slower and bronze 75% slower. The HUD shows the next medal to aim for, the finish screen shows what you earned, and the level select shows your medal on each level plus your totals.
 - **Gun skins:** Nine colour styles for the grapple gun, picked from **Gun** on the main menu. The live gun stays visible next to the list, so you see the change straight away. They unlock with progress: Standard (free), Rookie Teal (finish the tutorial), Bronze Age (5 medals), Crimson (15 medals), Cobalt (5 silver-or-better), Toxic (15 silver-or-better), Architect (finish a level you built in the editor), Gilded (10 golds) and Phantom Chrome (gold on all 30 levels). The finish screen tells you when you've unlocked a new one.
+- **Rope colours and hook trails:** Also on the Gun page: 9 rope colours (including an animated rainbow) and 6 trails that follow the flying hook (comet, smoke, fire, sparkle, ember, rainbow). Most are unlocked by achievements, plus 4 extra gun skins (Daybreak, Spectre, Voyager, Champion). The achievement pop-up says what each one unlocks.
 - **Proven finishable:** Every level is checked by the autopilot (see below) to make sure it can be finished without falling.
 - **Checkpoints and finish:** Tall columns of light. Flying through them anywhere counts.
 - **Timer and best times:** The clock starts when you leave the start platform. Your best time and checkpoint splits for each level, and which levels you've unlocked, are saved in the browser.
@@ -96,6 +97,7 @@ The full controls list sits behind the **Controls** button on the main menu.
 | `src/stats.js` | Lifetime stats |
 | `src/achievements.js` | The 30 achievements and when each is earned |
 | `src/skins.js` | Gun skins and their unlock rules |
+| `src/cosmetics.js` | Rope colours and hook trails |
 | `src/tutorial.js` | Tutorial steps and when each one is ticked off |
 | `src/render.js` | three.js scene, sky, clouds, hook head |
 | `src/viewmodel.js` | First-person arm and grapple gun |
