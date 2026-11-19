@@ -2,7 +2,9 @@ import { isHookable, insideBox, buildTutorialCourse, buildCustomCourse } from '.
 import { Editor, TOOLS } from './editor.js';
 import { encodeLevel, decodeLevel, newLevelId } from './custom.js';
 import { onlineEnabled, submitScore, getLeaderboard, getRecordGhost, cleanName, publishLevel, unpublishLevel, listLevels, voteLevel } from './online.js';
-import { GhostRecorder, encodeGhost, decodeGhost } from './ghost.js';
+import { GhostRecorder, encodeGhost, decodeGhost, ghostAt, GHOST_RATE } from './ghost.js';
+import { updateMovers } from './course.js';
+import * as THREE from 'three';
 import { StatsTracker, statsRows } from './stats.js';
 import { ACHIEVEMENTS, newAchievements } from './achievements.js';
 import { Flyover } from './flyover.js';
@@ -56,6 +58,7 @@ const ui = {
   profileBtn: $('profile-btn'), statsGrid: $('stats-grid'), tabStats: $('tab-stats'), tabAch: $('tab-ach'),
   profileStats: $('profile-stats'), profileAch: $('profile-ach'),
   flyoverHint: $('flyover-hint'), flyoverSetting: $('flyover-setting'),
+  watchBtn: $('watch-btn'), boardWatch: $('board-watch'), replayBar: $('replay-bar'),
   quality: $('quality'), showFps: $('show-fps'), fps: $('fps'), phoneNotice: $('phone-notice'), phoneContinue: $('phone-continue'),
   finish: $('finish'), finishTitle: $('finish-title'), finishTime: $('finish-time'),
   finishNote: $('finish-note'), finishHint: $('finish-hint'), finishMedal: $('finish-medal'),
@@ -290,7 +293,10 @@ async function loadGhosts(def) {
   if (code) {
     try {
       const samples = await decodeGhost(code);
-      if (token === ghostToken) myGhost = samples;
+      if (token === ghostToken) {
+        myGhost = samples;
+        if (state === 'menu') refreshMainScreen();
+      }
     } catch { /* corrupt or old: ignore */ }
   }
   refreshGhosts();
@@ -896,6 +902,7 @@ function refreshMainScreen() {
   const inProgress = run.started && !run.finished;
   ui.playBtn.textContent = inProgress ? 'RESUME' : 'PLAY';
   ui.restartBtn.classList.toggle('hidden', !inProgress);
+  ui.watchBtn.classList.toggle('hidden', !myGhost || inProgress);
   ui.tutorialBtn.classList.toggle('highlight', !progress.tutorialDone);
   refreshDailyButton();
   ui.newHint.classList.toggle('hidden', !!progress.tutorialDone);
@@ -936,15 +943,92 @@ function buildLevelGrid() {
 function setState(next) {
   if (next === 'menu') saveStats();
   if (next !== 'playing' && flyover) endFlyover();
+  if (state === 'replay' && next !== 'replay') stopReplay();
   state = next;
   ui.menu.classList.toggle('hidden', state !== 'menu');
-  ui.hud.classList.toggle('hidden', state === 'menu');
+  ui.hud.classList.toggle('hidden', state === 'menu' || state === 'replay');
+  ui.replayBar.classList.toggle('hidden', state !== 'replay');
   ui.hud.classList.toggle('editing', state === 'editor');
   renderer.showViewModel = state !== 'editor';
   if (state === 'editor') renderer.setGhosts([]);
   if (state !== 'editor') editor.hidePreview();
   if (state !== 'finished') ui.finish.classList.add('hidden');
   if (state === 'menu') showScreen('main');
+}
+
+// --- Replay viewer --------------------------------------------------------------
+// Watch a recorded run (your best, or the world record) from a chase camera.
+
+let replay = null; // { samples, label, t, duration, paused, speed, cam }
+
+function startReplay(samples, label, color) {
+  if (!samples?.length) return;
+  if (document.pointerLockElement) document.exitPointerLock();
+  replay = { samples, label, color, t: 0, duration: (samples.length - 1) / GHOST_RATE, paused: false, speed: 1, cam: null };
+  renderer.setGhosts([{ samples, color, label }]);
+  setState('replay');
+}
+
+function stopReplay() {
+  replay = null;
+  renderer.cameraOverride = null;
+  updateMovers(course, run.time);
+  refreshGhosts();
+}
+
+function replayKey(code) {
+  if (code === 'Escape' || code === 'KeyQ') return setState('menu');
+  if (code === 'Space') {
+    if (replay.t >= replay.duration) replay.t = 0;
+    replay.paused = !replay.paused;
+  }
+  if (code === 'ArrowLeft') replay.t = Math.max(0, replay.t - 2);
+  if (code === 'ArrowRight') replay.t = Math.min(replay.duration, replay.t + 2);
+  if (code === 'Digit1') replay.speed = 0.5;
+  if (code === 'Digit2') replay.speed = 1;
+  if (code === 'Digit3') replay.speed = 2;
+}
+
+function updateReplay(dt) {
+  if (!replay.paused) replay.t = Math.min(replay.duration, replay.t + dt * replay.speed);
+  if (replay.t >= replay.duration) replay.paused = true;
+  updateMovers(course, replay.t); // moving anchors as they were during the run
+  const now = ghostAt(replay.samples, replay.t);
+  const ahead = ghostAt(replay.samples, Math.min(replay.duration, replay.t + 0.35));
+  const pos = new THREE.Vector3(...now.pos);
+  const dir = new THREE.Vector3(...ahead.pos).sub(pos).setY(0);
+  if (dir.lengthSq() < 0.01) dir.set(0, 0, -1);
+  dir.normalize();
+  // Chase camera: behind and above, smoothed so it doesn't jitter.
+  const want = pos.clone().addScaledVector(dir, -8).add(new THREE.Vector3(0, 3, 0));
+  if (!replay.cam) replay.cam = { pos: want.clone(), look: pos.clone() };
+  const k = Math.min(1, dt * 4);
+  replay.cam.pos.lerp(want, k);
+  replay.cam.look.lerp(pos.clone().addScaledVector(dir, 4), k);
+  renderer.cameraOverride = replay.cam;
+  renderer.updateGhosts(replay.t);
+  ui.replayBar.innerHTML = `<b>Replay · ${replay.label}</b> <span class="rb-time">${formatTime(replay.t)} / ${formatTime(replay.duration)}</span>` +
+    `<span class="rb-track"><i style="width:${(replay.t / replay.duration) * 100}%"></i></span>` +
+    `<span class="rb-keys">${replay.t >= replay.duration ? 'Finished · <kbd>Space</kbd> watch again' : `<kbd>Space</kbd> ${replay.paused ? 'play' : 'pause'}`} · <kbd>←</kbd><kbd>→</kbd> skip · <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> speed (${replay.speed}x) · <kbd>Esc</kbd> back</span>`;
+}
+
+function watchBest() {
+  startReplay(myGhost, 'Your best', '#5ff0ff');
+}
+
+async function watchRecord(def) {
+  if (level.id !== def.id) {
+    mode = 'level';
+    customLevel = null;
+    loadDef(def);
+  }
+  try {
+    const rec = await getRecordGhost(def.id);
+    if (!rec) return showToast('No world record ghost yet', '#ffffff');
+    startReplay(await decodeGhost(rec.code), `World record · ${rec.name}`, '#ffd36b');
+  } catch (e) {
+    showToast("Couldn't load the world record", '#ff9a9a');
+  }
 }
 
 // --- Game events --------------------------------------------------------------
@@ -1059,7 +1143,7 @@ function finishLevel(e) {
     storage.setProgress(progress);
   }
   ui.finishHint.innerHTML = hasNext
-    ? '<kbd>N</kbd> next level · <kbd>R</kbd> fly again · <kbd>Esc</kbd> menu'
+    ? '<kbd>N</kbd> next level · <kbd>R</kbd> fly again · <kbd>P</kbd> watch replay · <kbd>Esc</kbd> menu'
     : 'You beat every level! · <kbd>R</kbd> fly again · <kbd>Esc</kbd> menu';
   state = 'finished';
   ui.finish.classList.remove('hidden');
@@ -1193,6 +1277,8 @@ function editorKey(code) {
 }
 
 input.handlers.key = (code) => {
+  if (state === 'replay') return replayKey(code);
+  if (code === 'KeyP' && state === 'finished' && myGhost) return watchBest();
   if (flyover && state === 'playing') return endFlyover();
   if (state === 'editor') return editorKey(code);
   if (code === 'KeyT' && mode === 'test' && state !== 'menu') return backToEditor();
@@ -1239,7 +1325,7 @@ input.handlers.lockChange = (locked) => {
       setState('playing');
       maybeStartFlyover();
     }
-  } else if (!botMode) {
+  } else if (!botMode && state !== 'replay') { // a replay releases the mouse on purpose
     const inEditor = state === 'editor' || mode === 'test';
     resumeTo = state === 'editor' ? 'editor' : 'play';
     setState('menu');
@@ -1274,6 +1360,8 @@ ui.communityBtn.addEventListener('click', () => showScreen('community'));
 ui.tabNew.addEventListener('click', () => { communitySort = 'new'; renderCommunity(); });
 ui.tabTop.addEventListener('click', () => { communitySort = 'top'; renderCommunity(); });
 ui.boardsBtn.addEventListener('click', () => showScreen('boards'));
+ui.watchBtn.addEventListener('click', watchBest);
+ui.boardWatch.addEventListener('click', () => watchRecord(boardDef(boardIndex)));
 ui.boardPrev.addEventListener('click', () => {
   boardIndex = boardIndex <= -1 ? LEVELS.length - 1 : boardIndex - 1; // wraps through the daily (-1)
   showBoard();
@@ -1446,6 +1534,9 @@ function frame(now) {
     editor.fly(p, { forward: m.forward, right: m.right, up: input.keys.has('Space'), down: input.keys.has('ShiftLeft') || input.keys.has('ControlLeft') }, dt);
     editor.updatePreview(p);
     accumulator = 0;
+  } else if (state === 'replay') {
+    updateReplay(dt);
+    accumulator = 0;
   } else if (flyover && state === 'playing') {
     // Flyover: no physics, no player control.
     input.consumeMouse();
@@ -1497,7 +1588,7 @@ function frame(now) {
   if (toastTimer > 0 && (toastTimer -= dt) <= 0) ui.toast.classList.remove('show');
   if (splitTimer > 0 && (splitTimer -= dt) <= 0) ui.split.classList.remove('show');
 
-  renderer.updateGhosts(run.time);
+  if (state !== 'replay') renderer.updateGhosts(run.time);
   if (!bot && state === 'playing') move = input.movement();
   renderer.render(p, target && isHookable(target.box) ? target : null, dt, {
     mouseDX: mx, mouseDY: my, right: move.right, reeling: move.reel,
@@ -1526,6 +1617,8 @@ window.__skyhook = {
   online: { submitScore, getLeaderboard },
   get music() { return music; },
   get stats() { return stats.s; },
+  get replay() { return replay; },
+  watchBest, watchRecord,
   get flyover() { return flyover; },
   get achieved() { return achieved; },
   checkAchievements,

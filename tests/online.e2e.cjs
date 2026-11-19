@@ -127,6 +127,13 @@ async function browserTests() {
     for (let i = 0; i < 40 && !rec; i++) { await pg.waitForTimeout(250); rec = await pg.evaluate(() => window.__skyhook.ghosts.record && { name: window.__skyhook.ghosts.record.name, n: window.__skyhook.ghosts.record.samples.length }); }
     check(rec && rec.name === 'SkyAce' && rec.n > 50, `another player gets the world record ghost (${rec ? `${rec.name}, ${rec.n} samples` : 'none'})`);
     check(await pg.evaluate(() => window.__skyhook.renderer.ghosts.length === 1 && window.__skyhook.renderer.ghosts[0].label === 'WR · SkyAce'), 'the world record ghost is shown with the holder\'s name');
+    // ... and can watch it as a replay from the Leaderboards page.
+    await pg.click('#boards-btn');
+    await pg.waitForTimeout(500);
+    await pg.click('#board-watch');
+    let label = '';
+    for (let i = 0; i < 40 && !label; i++) { await pg.waitForTimeout(250); label = await pg.evaluate(() => window.__skyhook.replay?.label || ''); }
+    check(label === 'World record · SkyAce' && await pg.isVisible('#replay-bar'), `"Watch the world record" plays the record holder's run (${label})`);
     await ctxG.close();
 
     // Player 2 (different browser profile) sees it on the Leaderboards page.

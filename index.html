@@ -255,6 +255,12 @@
         background: var(--panel); border: 1px solid rgba(255,255,255,0.16); font-weight: 700; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
       #flyover-hint.show { opacity: 1; }
       #hud.flying #crosshair, #hud.flying #speed, #hud.flying .timer-box { display: none; }
+      #replay-bar { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 6; width: min(760px, calc(100vw - 32px));
+        padding: 12px 16px; border-radius: 12px; background: var(--panel); border: 1px solid rgba(255,255,255,0.16); display: grid; gap: 6px; font-size: 14px; }
+      .rb-time { font-family: ui-monospace, Consolas, monospace; color: var(--gold); margin-left: 8px; }
+      .rb-track { display: block; height: 6px; border-radius: 3px; background: rgba(255,255,255,0.12); overflow: hidden; }
+      .rb-track i { display: block; height: 100%; background: var(--accent); }
+      .rb-keys { color: var(--muted); font-size: 12.5px; }
       .footer { margin-top: 16px; font-size: 12px; color: var(--muted); }
       .hud-right { position: absolute; top: 18px; right: 22px; text-align: right; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.45); }
       #level-label { font-size: 15px; font-weight: 700; }
@@ -293,6 +299,7 @@
     <div id="fps" class="hidden"></div>
     <div id="ach-popup"></div>
     <div id="flyover-hint"></div>
+    <div id="replay-bar" class="hidden"></div>
     <div id="phone-notice" class="overlay hidden">
       <div class="card" style="text-align:center">
         <h1 style="font-size:44px">SKY<span>HOOK</span></h1>
@@ -335,6 +342,7 @@
         <div class="course-line"><span id="course-name">Level</span><span>Best: <b id="menu-best">--</b></span></div>
         <button class="play" id="play-btn">PLAY</button>
         <button class="btn hidden" id="restart-btn">Restart level</button>
+        <button class="btn hidden" id="watch-btn">Watch your best run</button>
         <button class="btn daily" id="daily-btn"><b>DAILY CHALLENGE</b><span id="daily-info"></span></button>
         <div class="btn-row">
           <button class="btn" id="levels-btn">Levels</button>
@@ -435,6 +443,7 @@
           <button class="btn small" id="board-next">&#9654;</button>
         </div>
         <div id="board-list"></div>
+        <button class="btn" id="board-watch">Watch the world record</button>
         <label class="field">Your name on the leaderboards <input id="board-name" maxlength="16" /></label>
         <p class="hint">Letters, numbers, spaces and _ . - only. A new name shows up next time you set a time.</p>
         <button class="btn" data-back>Back</button>

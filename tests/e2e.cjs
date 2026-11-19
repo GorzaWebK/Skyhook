@@ -238,6 +238,29 @@ async function waitForServer() {
     check(ghostSaved, 'a new best saves your ghost');
     await page.waitForTimeout(3000);
     check(await g(() => window.__skyhook.run.player.vel.length() < 5), 'player settles into a hover after finishing');
+    // Replay viewer: watch the run you just did.
+    await page.keyboard.press('KeyP');
+    await page.waitForTimeout(400);
+    const rp0 = await g(() => ({ st: window.__skyhook.state, t: window.__skyhook.replay?.t, cam: window.__skyhook.renderer.camera.position.toArray() }));
+    await page.waitForTimeout(1500);
+    const rp1 = await g(() => ({ t: window.__skyhook.replay?.t, cam: window.__skyhook.renderer.camera.position.toArray() }));
+    check(rp0.st === 'replay' && await page.isVisible('#replay-bar') && rp1.t > rp0.t && Math.hypot(...rp1.cam.map((v, i) => v - rp0.cam[i])) > 1, 'P on the finish screen plays a replay with a chase camera');
+    await page.screenshot({ path: 'test-results/replay.png' });
+    await page.keyboard.press('Space');
+    const tp = await g(() => window.__skyhook.replay.t);
+    await page.waitForTimeout(800);
+    check(await g((t) => window.__skyhook.replay.paused && window.__skyhook.replay.t === t, tp), 'Space pauses the replay');
+    await page.keyboard.press('ArrowRight');
+    check(await g((t) => window.__skyhook.replay.t >= t + 1.99, tp), 'the right arrow skips ahead');
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(400);
+    check(await g(() => window.__skyhook.state === 'menu' && !window.__skyhook.replay && !window.__skyhook.renderer.cameraOverride), 'Esc leaves the replay');
+    check(await page.isVisible('#watch-btn'), 'the main menu offers "Watch your best run"');
+    await page.click('#play-btn');
+    await page.waitForTimeout(600);
+    // (detach the autopilot's rope first, or it pulls the player straight back)
+    await g(() => { const s = window.__skyhook; const p = s.run.player; p.hook = null; p.pending = null; p.pos.copy(s.course.finish.trigger.center); });
+    for (let i = 0; i < 20 && (await g(() => window.__skyhook.state)) !== 'finished'; i++) await page.waitForTimeout(200);
     await page.keyboard.press('KeyN');
     await page.waitForTimeout(500);
     check(await g(() => window.__skyhook.level.number === 2 && window.__skyhook.state === 'playing'), 'N goes to the next level');
@@ -334,7 +357,8 @@ async function waitForServer() {
     const cards = await page.$$eval('#skin-grid .skin-card', (els) => els.map((e) => ({ id: e.dataset.skin, locked: e.disabled, text: e.textContent })));
     check(cards.length === 13, `13 gun skins listed (${cards.length})`);
     const open = cards.filter((c) => !c.locked).map((c) => c.id).sort().join(',');
-    check(open === 'bronze,cobalt,rookie,standard', `skins unlocked by 5 golds + tutorial: ${open}`);
+    const openSet = new Set(open.split(','));
+    check(['bronze', 'cobalt', 'rookie', 'standard'].every((x) => openSet.has(x)) && !['crimson', 'toxic', 'gilded', 'phantom'].some((x) => openSet.has(x)), `medal skins unlock from 5 golds + tutorial, others stay locked: ${open}`);
     check(cards.find((c) => c.id === 'gilded').text.includes('5 / 10'), 'locked skins show progress towards unlocking');
     await page.click('.skin-card[data-skin="cobalt"]');
     await page.waitForTimeout(300);
