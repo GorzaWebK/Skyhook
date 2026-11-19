@@ -531,6 +531,17 @@ async function waitForServer() {
     await page.waitForTimeout(800);
     check((await page.textContent('#daily-info')).includes('best') && (await page.textContent('#daily-info')).includes('streak'), `main menu shows your daily best and streak ("${(await page.textContent('#daily-info')).trim()}")`);
 
+    // Weekly tournament.
+    await page.goto(URL);
+    await page.waitForTimeout(800);
+    check(await page.isVisible('#weekly-btn') && (await page.textContent('#weekly-info')).includes('ends in'), 'Weekly tournament button shows on the main menu');
+    await page.goto(`${URL}?bot=1&weekly=1`);
+    state = '';
+    for (let i = 0; i < 220 && state !== 'finished'; i++) { await page.waitForTimeout(500); state = await g(() => window.__skyhook.state); }
+    const wk = await g(() => ({ title: document.getElementById('finish-title').textContent, theme: window.__skyhook.renderer.themeId, weekly: window.__skyhook.level.weekly }));
+    check(state === 'finished' && wk.weekly && wk.theme === 'storm' && wk.title.startsWith('Weekly tournament #'), `the autopilot finishes this week's storm tournament (${wk.title})`);
+    check((await page.textContent('#finish-hint')).includes('trophy'), 'the finish screen explains the weekly trophies');
+
     // Level flyover.
     await g(() => localStorage.setItem('test.flyover', '1'));
     await page.goto(`${URL}?unlock=all&level=2`);

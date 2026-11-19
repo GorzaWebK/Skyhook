@@ -629,3 +629,28 @@ test('wind pushes you, lasers send you back, zip-lines carry you', () => {
   for (let i = 0; i < 60; i++) step(q, idle, course);
   assert.ok(q.hook.point.z < z0 - 5 && q.pos.z < zip.max.z - 3, 'hook slides along the rail and pulls you');
 });
+
+// --- Weekly tournament -----------------------------------------------------------------
+import { weeklyFor, buildWeekly, weekKey, weekNumber } from '../src/weekly.js';
+import { WEEKLY } from '../src/weekly-seeds.js';
+
+test('weekly tournament: one storm level per week, with ISO week names', () => {
+  assert.equal(weekKey(0), '2026-W47');
+  assert.equal(weekKey(6), '2026-W53', '2026 has 53 ISO weeks');
+  assert.equal(weekKey(7), '2027-W01');
+  assert.equal(weekNumber(new Date('2026-11-22T23:59:00Z')), 0, 'Sunday is still week 0');
+  assert.equal(weekNumber(new Date('2026-11-23T00:00:00Z')), 1, 'Monday starts week 1');
+  const w = weeklyFor(3);
+  assert.deepEqual(weeklyFor(3), w);
+  assert.equal(w.id, `weekly-${weekKey(3)}`);
+  assert.equal(buildWeekly(w).theme, 'storm');
+  assert.equal(WEEKLY.length, 104);
+});
+
+test('weekly tournament: the first 20 weeks are finishable and their gold times are current', () => {
+  for (let n = 0; n < 20; n++) {
+    const r = botRun(buildWeekly(weeklyFor(n)));
+    assert.ok(r.finished && r.falls === 0, `week ${n}`);
+    assert.ok(Math.abs(r.time - WEEKLY[n][2]) < 0.002, `week ${n} par`);
+  }
+});

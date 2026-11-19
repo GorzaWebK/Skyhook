@@ -213,6 +213,8 @@
       .set-grid b { display: inline-block; min-width: 46px; text-align: right; font: 13px ui-monospace, Consolas, monospace; color: var(--muted); }
       .btn.daily { display: flex; flex-direction: column; align-items: center; gap: 2px; border-color: rgba(255, 211, 107, 0.6); background: rgba(255, 211, 107, 0.12); }
       .btn.daily b { color: var(--gold); letter-spacing: 1px; }
+      .btn.weekly { border-color: rgba(180, 107, 255, 0.6); background: rgba(180, 107, 255, 0.12); }
+      .btn.weekly b { color: #c99bff; }
       .btn.daily span { font-size: 12px; font-weight: 500; color: var(--muted); }
       .tabs .btn.on { border-color: var(--accent); background: rgba(255,138,61,0.18); }
       .btn.vote.on { border-color: #7dff9a; color: #7dff9a; }
@@ -344,6 +346,7 @@
         <button class="btn hidden" id="restart-btn">Restart level</button>
         <button class="btn hidden" id="watch-btn">Watch your best run</button>
         <button class="btn daily" id="daily-btn"><b>DAILY CHALLENGE</b><span id="daily-info"></span></button>
+        <button class="btn daily weekly" id="weekly-btn"><b>WEEKLY TOURNAMENT</b><span id="weekly-info"></span></button>
         <div class="btn-row">
           <button class="btn" id="levels-btn">Levels</button>
           <button class="btn" id="tutorial-btn">Tutorial</button>

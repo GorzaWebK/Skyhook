@@ -45,7 +45,7 @@ async function rulesTests() {
   check(!(await ok(db.set(refB, entry('Bob', 1)))), 'rules: impossibly fast times (under 3 s) are rejected');
   check(!(await ok(db.set(refB, entry('Bob', 20, { cheat: true })))), 'rules: extra fields are rejected');
   check(!(await ok(db.set(refB, { name: 'Bob', time: 20, at: 12345 }))), 'rules: the timestamp must be the server time');
-  check(!(await ok(db.set(db.ref(B.d, `skyhook/scores/level-99/${B.uid}`), entry('Bob', 20)))), 'rules: only real level names (level-1 to level-30)');
+  check(!(await ok(db.set(db.ref(B.d, `skyhook/scores/level-99/${B.uid}`), entry('Bob', 20)))) && await ok(db.set(db.ref(B.d, `skyhook/scores/level-40/${B.uid}`), entry('Bob', 20))), 'rules: only real level names (level-1 to level-40)');
   check(!(await ok(db.get(db.ref(B.d, 'skyhook')))), 'rules: the whole database cannot be read in one go');
   check(await ok(db.set(refB, entry('Bob', 20))), 'rules: a valid entry on another level is fine');
   // Community levels.
@@ -167,6 +167,25 @@ async function browserTests() {
     let dailyList = '';
     for (let i = 0; i < 40 && !dailyList.includes('Rival'); i++) { await p2.waitForTimeout(250); dailyList = await p2.textContent('#board-list'); }
     check((await p2.textContent('#board-level')).includes("Today's daily") && dailyList.includes('Rival (you)'), 'the Leaderboards page has a board for today\'s daily challenge');
+    await p2.click('#board-next');
+    // This week's tournament board (two steps back from level 1).
+    await p2.evaluate(() => window.__skyhook.online.submitScore(window.__skyhook.weeklyFor().id, 'Rival', 40));
+    await p2.click('#board-prev');
+    await p2.click('#board-prev');
+    let wList = '';
+    for (let i = 0; i < 40 && !wList.includes('Rival'); i++) { await p2.waitForTimeout(250); wList = await p2.textContent('#board-list'); }
+    check((await p2.textContent('#board-level')).includes("This week's tournament") && wList.includes('Rival (you)'), "the Leaderboards page has this week's tournament board");
+    // Trophies: top of last week's board -> a trophy.
+    const trophy = await p2.evaluate(async () => {
+      const s = window.__skyhook;
+      const prevId = s.weeklyFor(s.weeklyFor().weekNum - 1).id;
+      await s.online.submitScore(prevId, 'Rival', 33);
+      s.progress.trophyChecked = null;
+      await s.checkTrophies();
+      return s.progress.trophies;
+    });
+    check(Object.values(trophy || {}).includes(1), `finishing top of last week's tournament earns a trophy (${JSON.stringify(trophy)})`);
+    await p2.click('#board-next');
     await p2.click('#board-next');
     await p2.fill('#board-name', 'Rival<script>');
     await p2.press('#board-name', 'Tab');
