@@ -5,7 +5,7 @@ import { onlineEnabled, submitScore, getLeaderboard, cleanName } from './online.
 import { TUTORIAL_STEPS, createTutorialFlags } from './tutorial.js';
 import { LEVELS, MEDALS, buildLevel, medalFor, nextMedal } from './levels.js';
 import { raycast, eyePosition, aimDirection, FIXED_DT, TUNING } from './physics.js';
-import { createRun, restartRun, tick, hook, unhook } from './run.js';
+import { createRun, restartRun, respawn, tick, hook, unhook } from './run.js';
 import { createBot, botInput } from './bot.js';
 import { Renderer } from './render.js';
 import { Sound } from './audio.js';
@@ -38,7 +38,9 @@ const ui = {
   tutorial: $('tutorial'), tutStep: $('tut-step'), tutText: $('tut-text'),
   courseName: $('course-name'), menuBest: $('menu-best'),
   levelGrid: $('level-grid'), levelProgress: $('level-progress'),
-  sens: $('sens'), sensVal: $('sens-val'), mute: $('mute'), musicVol: $('music-vol'),
+  sens: $('sens'), sensVal: $('sens-val'), mute: $('mute'), musicVol: $('music-vol'), musicVal: $('music-val'),
+  invert: $('invert'), fov: $('fov'), fovVal: $('fov-val'), sfxVol: $('sfx-vol'), sfxVal: $('sfx-val'),
+  shake: $('shake'), speedfx: $('speedfx'), settingsBtn: $('settings-btn'),
   finish: $('finish'), finishTitle: $('finish-title'), finishTime: $('finish-time'),
   finishNote: $('finish-note'), finishHint: $('finish-hint'), finishMedal: $('finish-medal'),
   medalTotals: $('medal-totals'),
@@ -81,7 +83,13 @@ function unlockedSkinIds() {
 const canvas = $('game');
 const renderer = new Renderer(canvas);
 const settings = storage.getSettings();
+// Defaults for settings added later (older saves don't have them).
+Object.assign(settings, {
+  invertY: false, fov: 85, sfxVolume: 1, musicVolume: 0.6, shake: true, speedFx: true,
+  ...settings,
+});
 const sound = new Sound(settings.muted);
+sound.sfxVolume = settings.sfxVolume;
 const input = new Input(canvas);
 let music = null; // created on the first click (browsers block audio before that)
 
@@ -768,19 +776,29 @@ input.handlers.key = (code) => {
     loadLevel(level.index + 1); // the tutorial's index is -1, so this goes to level 1
     state = 'playing';
   }
-  if (code === 'KeyM') {
-    settings.muted = !settings.muted;
-    ui.musicVol.value = settings.musicVolume ?? 0.6;
-ui.musicVol.addEventListener('input', () => {
-  settings.musicVolume = Number(ui.musicVol.value);
-  music?.setVolume(settings.musicVolume);
-  storage.setSettings(settings);
-});
-ui.mute.checked = settings.muted;
-    sound.setMuted(settings.muted);
-    storage.setSettings(settings);
-  }
+  if (code === 'KeyM') toggleMute();
+  if (code === 'KeyC' && state === 'playing' && run.started && !run.finished) backToCheckpoint();
 };
+function toggleMute() {
+  settings.muted = !settings.muted;
+  ui.mute.checked = settings.muted;
+  sound.setMuted(settings.muted);
+  storage.setSettings(settings);
+}
+
+// Instant retry: back to the last checkpoint (or the start) straight away.
+function backToCheckpoint() {
+  const hadCheckpoint = run.checkpoint >= 0;
+  respawn(run);
+  if (!hadCheckpoint) {
+    splits = [];
+    renderer.setCheckpointReached(-1);
+  }
+  if (bot) Object.assign(bot, createBot(run));
+  sound.fall();
+  showToast(hadCheckpoint ? 'Back to checkpoint' : 'Back to the start', '#ffffff');
+}
+
 input.handlers.lockChange = (locked) => {
   if (locked) {
     if (state === 'menu') {
@@ -882,25 +900,38 @@ ui.tutorialBtn.addEventListener('click', () => {
 });
 for (const b of document.querySelectorAll('[data-back]')) b.addEventListener('click', () => showScreen('main'));
 
-ui.sens.value = settings.sensitivity;
-ui.sensVal.textContent = `${Number(settings.sensitivity).toFixed(2)}x`;
-ui.sens.addEventListener('input', () => {
-  settings.sensitivity = Number(ui.sens.value);
-  ui.sensVal.textContent = `${settings.sensitivity.toFixed(2)}x`;
-  storage.setSettings(settings);
-});
-ui.musicVol.value = settings.musicVolume ?? 0.6;
-ui.musicVol.addEventListener('input', () => {
-  settings.musicVolume = Number(ui.musicVol.value);
-  music?.setVolume(settings.musicVolume);
-  storage.setSettings(settings);
-});
-ui.mute.checked = settings.muted;
-ui.mute.addEventListener('change', () => {
-  settings.muted = ui.mute.checked;
-  sound.setMuted(settings.muted);
-  storage.setSettings(settings);
-});
+function bindRange(input, label, key, format, apply) {
+  input.value = settings[key];
+  const show = () => { if (label) label.textContent = format(settings[key]); };
+  show();
+  input.addEventListener('input', () => {
+    settings[key] = Number(input.value);
+    show();
+    apply?.(settings[key]);
+    storage.setSettings(settings);
+  });
+}
+function bindCheck(input, key, apply) {
+  input.checked = !!settings[key];
+  input.addEventListener('change', () => {
+    settings[key] = input.checked;
+    apply?.(settings[key]);
+    storage.setSettings(settings);
+  });
+}
+const pct = (v) => `${Math.round(v * 100)}%`;
+bindRange(ui.sens, ui.sensVal, 'sensitivity', (v) => `${v.toFixed(2)}x`);
+bindRange(ui.fov, ui.fovVal, 'fov', (v) => `${v}°`, (v) => { renderer.baseFov = v; });
+bindRange(ui.sfxVol, ui.sfxVal, 'sfxVolume', pct, (v) => sound.setEffectsVolume(v));
+bindRange(ui.musicVol, ui.musicVal, 'musicVolume', pct, (v) => music?.setVolume(v));
+bindCheck(ui.invert, 'invertY');
+bindCheck(ui.mute, 'muted', (v) => sound.setMuted(v));
+bindCheck(ui.shake, 'shake', (v) => { renderer.shakeEnabled = v; });
+bindCheck(ui.speedfx, 'speedFx', (v) => { renderer.speedFx = v; });
+renderer.baseFov = settings.fov;
+renderer.shakeEnabled = settings.shake;
+renderer.speedFx = settings.speedFx;
+ui.settingsBtn.addEventListener('click', () => showScreen('settings'));
 
 // --- Main loop ----------------------------------------------------------------
 
@@ -927,7 +958,7 @@ function frame(now) {
     [mx, my] = input.consumeMouse();
     const k = 0.0022 * settings.sensitivity;
     p.yaw -= mx * k;
-    p.pitch = Math.max(-1.55, Math.min(1.55, p.pitch - my * k));
+    p.pitch = Math.max(-1.55, Math.min(1.55, p.pitch - (settings.invertY ? -my : my) * k));
     const m = input.movement();
     editor.fly(p, { forward: m.forward, right: m.right, up: input.keys.has('Space'), down: input.keys.has('ShiftLeft') || input.keys.has('ControlLeft') }, dt);
     editor.updatePreview(p);
@@ -936,7 +967,7 @@ function frame(now) {
     [mx, my] = input.consumeMouse();
     const k = 0.0022 * settings.sensitivity;
     p.yaw -= mx * k;
-    p.pitch = Math.max(-1.55, Math.min(1.55, p.pitch - my * k));
+    p.pitch = Math.max(-1.55, Math.min(1.55, p.pitch - (settings.invertY ? -my : my) * k));
     if (tut) tut.flags.look += (Math.abs(mx) + Math.abs(my)) * k;
     const before = tut ? { x: p.pos.x, z: p.pos.z, len: p.hook?.length, hook: p.hook } : null;
 

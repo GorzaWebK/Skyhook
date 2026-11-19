@@ -264,6 +264,7 @@ export class Renderer {
   }
 
   addShake(amount) {
+    if (this.shakeEnabled === false) return;
     this.shake = Math.min(1, this.shake + amount);
   }
 

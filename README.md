@@ -18,6 +18,7 @@ PC only (keyboard and mouse). Everything is made in code: the 3D world, textures
 | W A S D | Steer in the air and pump your swing |
 | Space | Jump |
 | R | Restart the level |
+| C | Back to your last checkpoint straight away (the clock keeps running) |
 | N / Enter | Next level (on the finish screen) |
 | M | Mute |
 | Esc | Pause (back to menu) |
@@ -58,7 +59,7 @@ The full controls list sits behind the **Controls** button on the main menu.
 - **Rope shot:** The hook visibly flies from the gun's muzzle to the block at 250 m/s, with the rope wiggling behind it, and catches when it lands. Let go before it lands and the shot is cancelled. The rope snaps taut when it catches and sags when it goes slack.
 - **Music:** A generated soundtrack (A minor, 100 BPM) that builds with your speed. A calm pad and bass play in the menu or when standing still. An arpeggio joins when you move, kick and hi-hats when you swing fast, and snare and a busier bass when you're flying. It has its own volume slider in the menu, and **M** mutes everything.
 - **Feel:** The view widens with speed, the camera shakes on hard landings and when the hook catches, and wind and rope-creak sounds follow your speed.
-- **Settings:** Mouse sensitivity and mute, both saved.
+- **Settings page:** mouse sensitivity, invert mouse, field of view, separate sound effects and music volumes, mute, camera shake on/off and speed effects on/off. All are saved.
 
 ## How it's built
 

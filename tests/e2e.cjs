@@ -131,10 +131,53 @@ async function waitForServer() {
     await page.waitForTimeout(400);
     check(await g(() => window.__skyhook.run.time === 0 && !window.__skyhook.run.started), 'R restarts the run');
 
+    // C: back to the last checkpoint without restarting the clock.
+    await g(() => {
+      const s = window.__skyhook; const cp = s.course.checkpoints[0];
+      s.run.player.pos.copy(cp.trigger.center); // fly through checkpoint 1
+    });
+    await page.waitForTimeout(400);
+    await g(() => { const p = window.__skyhook.run.player; p.pos.set(300, 10, -50); p.vel.set(0, 0, 0); });
+    const tBefore = await g(() => window.__skyhook.run.time);
+    await page.keyboard.press('KeyC');
+    await page.waitForTimeout(300);
+    const afterC = await g(() => {
+      const s = window.__skyhook; const cp = s.course.checkpoints[0];
+      return { d: s.run.player.pos.distanceTo(cp.spawn.pos), t: s.run.time, cp: s.run.checkpoint };
+    });
+    check(afterC.cp === 0 && afterC.d < 1 && afterC.t >= tBefore, `C puts you back at your last checkpoint with the clock still running (${afterC.t.toFixed(2)} s)`);
+    await page.keyboard.press('KeyR');
+    await page.waitForTimeout(300);
+
     const muted = await page.isChecked('#mute');
     await page.keyboard.press('KeyM');
     await page.waitForTimeout(100);
     check((await page.isChecked('#mute')) !== muted, 'M toggles mute');
+
+    // Settings page.
+    await g(() => document.exitPointerLock());
+    await page.waitForTimeout(300);
+    await page.click('#settings-btn');
+    check(await page.isVisible('#screen-settings') && !(await page.isVisible('#sens')) === false, 'Settings button opens the settings page');
+    await page.fill('#fov', '100');
+    await page.dispatchEvent('#fov', 'input');
+    check(await g(() => window.__skyhook.renderer.baseFov === 100), 'field of view slider changes the view');
+    await page.check('#invert');
+    await page.fill('#sfx-vol', '0.25');
+    await page.dispatchEvent('#sfx-vol', 'input');
+    check((await page.textContent('#sfx-val')) === '25%', 'sound effects volume has its own slider');
+    await page.uncheck('#shake');
+    await page.reload();
+    await page.waitForTimeout(800);
+    const saved = await g(() => JSON.parse(localStorage.getItem('skyhook.settings')));
+    check(saved.fov === 100 && saved.invertY === true && saved.sfxVolume === 0.25 && saved.shake === false, 'settings are remembered after a reload');
+    await page.click('#play-btn');
+    await page.waitForTimeout(500);
+    const pitch0 = await g(() => window.__skyhook.run.player.pitch);
+    await g(() => document.dispatchEvent(new MouseEvent('mousemove', { movementX: 0, movementY: -60 })));
+    await page.waitForTimeout(400);
+    check(await g((p0) => window.__skyhook.run.player.pitch < p0 - 0.05, pitch0), 'invert mouse flips looking up and down');
+    await g(() => { const st = JSON.parse(localStorage.getItem('skyhook.settings')); Object.assign(st, { fov: 85, invertY: false, sfxVolume: 1, shake: true }); localStorage.setItem('skyhook.settings', JSON.stringify(st)); });
     await page.keyboard.press('KeyM');
 
     await g(() => document.exitPointerLock());

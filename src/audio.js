@@ -18,6 +18,10 @@ export class Sound {
     this.master = ctx.createGain();
     this.master.gain.value = this.muted ? 0 : 0.8;
     this.master.connect(ctx.destination);
+    // Sound effects go through their own volume control (music doesn't).
+    this.sfx = ctx.createGain();
+    this.sfx.gain.value = this.sfxVolume ?? 1;
+    this.sfx.connect(this.master);
 
     // Two seconds of white noise, reused by wind and whooshes.
     const len = ctx.sampleRate * 2;
@@ -35,7 +39,7 @@ export class Sound {
     this.windFilter.Q.value = 0.8;
     this.windGain = ctx.createGain();
     this.windGain.gain.value = 0;
-    src.connect(this.windFilter).connect(this.windGain).connect(this.master);
+    src.connect(this.windFilter).connect(this.windGain).connect(this.sfx);
     src.start();
 
     // Rope creak while hooked: quiet filtered noise that follows tension.
@@ -48,8 +52,13 @@ export class Sound {
     this.creakFilter.Q.value = 12;
     this.creakGain = ctx.createGain();
     this.creakGain.gain.value = 0;
-    creakSrc.connect(this.creakFilter).connect(this.creakGain).connect(this.master);
+    creakSrc.connect(this.creakFilter).connect(this.creakGain).connect(this.sfx);
     creakSrc.start();
+  }
+
+  setEffectsVolume(v) {
+    this.sfxVolume = v;
+    if (this.sfx) this.sfx.gain.setTargetAtTime(v, this.ctx.currentTime, 0.05);
   }
 
   setMuted(muted) {
@@ -77,7 +86,7 @@ export class Sound {
     g.gain.setValueAtTime(0.0001, t);
     g.gain.exponentialRampToValueAtTime(gain, t + 0.008);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    osc.connect(g).connect(this.master);
+    osc.connect(g).connect(this.sfx);
     osc.start(t);
     osc.stop(t + dur + 0.05);
   }
@@ -96,7 +105,7 @@ export class Sound {
     g.gain.setValueAtTime(0.0001, t);
     g.gain.exponentialRampToValueAtTime(gain, t + 0.01);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    src.connect(f).connect(g).connect(this.master);
+    src.connect(f).connect(g).connect(this.sfx);
     src.start(t, Math.random());
     src.stop(t + dur + 0.05);
   }
