@@ -34,8 +34,14 @@ export class Input {
     document.addEventListener('mousedown', (e) => {
       if (!this.locked) return;
       if (e.button === 0) this.setHook(true);
-      if (e.button === 2) this.reelHeld = true;
+      if (e.button === 2) {
+        this.reelHeld = true;
+        this.handlers.altDown?.();
+      }
     });
+    document.addEventListener('wheel', (e) => {
+      if (this.locked) this.handlers.wheel?.(Math.sign(e.deltaY));
+    }, { passive: true });
     document.addEventListener('mouseup', (e) => {
       if (e.button === 0) this.setHook(false);
       if (e.button === 2) this.reelHeld = false;

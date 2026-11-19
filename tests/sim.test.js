@@ -266,3 +266,105 @@ test('gun skins unlock from progress', () => {
   assert.equal(skinRequirement(SKINS.find((sk) => sk.id === 'gilded'), some), 'Earn 10 gold medals (0 / 10)');
   assert.equal(new Set(SKINS.map((sk) => sk.id)).size, SKINS.length, 'unique ids');
 });
+
+// --- Level editor -------------------------------------------------------------
+import { buildCustomCourse } from '../src/course.js';
+import { encodeLevel, decodeLevel, validateLevel } from '../src/custom.js';
+import { Editor, placementCenter, faceNormal } from '../src/editor.js';
+import { botRun } from '../src/botrun.js';
+
+// The tutorial layout, rebuilt from editor blocks.
+const handmade = () => ({
+  v: 1,
+  name: 'Handmade',
+  blocks: [
+    ['a', 0, 20, -26, 6, 6, 6], ['a', 0, 22, -54, 6, 6, 6], ['a', 5, 25, -82, 5.5, 5.5, 5.5],
+    ['c', 5, 6.25, -104, 11, 1.5, 11], ['a', 0, 24, -128, 5.5, 5.5, 5.5],
+    ['b', -4, 12, -142, 8, 8, 2], ['a', -5, 24, -156, 5.5, 5.5, 5.5], ['a', 0, 26, -184, 5, 5, 5],
+    ['f', 0, 7, -214, 18, 2, 18],
+  ],
+});
+
+test('custom level: course is built from editor blocks and the autopilot can finish it', () => {
+  const course = buildCustomCourse(handmade());
+  assert.equal(course.anchors.length, 6);
+  assert.equal(course.checkpoints.length, 1);
+  assert.ok(course.finish && course.finish.trigger.min.y >= course.finish.platform.max.y - 1e-6);
+  assert.equal(course.boxes.filter((b) => b.kind === 'blocker').length, 1);
+  const r = botRun(course);
+  assert.ok(r.finished && r.falls === 0, JSON.stringify(r));
+});
+
+test('custom level without a finish can still be flown (no crash)', () => {
+  const data = handmade();
+  data.blocks = data.blocks.filter((b) => b[0] !== 'f');
+  const course = buildCustomCourse(data);
+  assert.equal(course.finish, null);
+  const r = botRun(course, 20);
+  assert.equal(r.finished, false);
+});
+
+test('share codes round-trip and stay short', async () => {
+  const data = handmade();
+  const code = await encodeLevel(data);
+  assert.match(code, /^SKY1\.[A-Za-z0-9_-]+$/);
+  assert.ok(code.length < 260, `code length ${code.length}`);
+  assert.deepEqual(await decodeLevel(code), validateLevel(data));
+  assert.deepEqual(await decodeLevel(`  ${code.slice(0, 40)}\n${code.slice(40)} `), validateLevel(data), 'tolerates whitespace');
+});
+
+test('bad level codes are rejected with a clear reason', async () => {
+  await assert.rejects(decodeLevel('hello'), /doesn't look like a Skyhook level code/);
+  await assert.rejects(decodeLevel('SKY1.AAAA'), /damaged or incomplete/);
+  const bad = (blocks, extra = {}) => validateLevel({ v: 1, name: 'x', blocks, ...extra });
+  assert.throws(() => bad([['z', 0, 0, 0, 1, 1, 1]]), /unknown type/);
+  assert.throws(() => bad([['a', 0, 0, 0, 1, 1]]), /malformed/);
+  assert.throws(() => bad([['a', 9999, 0, 0, 1, 1, 1]]), /too far/);
+  assert.throws(() => bad([['a', 0, 0, 0, 500, 1, 1]]), /bad size/);
+  assert.throws(() => bad([['a', 0, 0, 0, NaN, 1, 1]]), /bad numbers/);
+  assert.throws(() => bad([['f', 0, 0, 0, 5, 1, 5], ['f', 9, 0, 0, 5, 1, 5]]), /one finish/);
+  assert.throws(() => bad(Array.from({ length: 501 }, () => ['a', 0, 0, 0, 1, 1, 1])), /Too many/);
+  assert.throws(() => validateLevel({ v: 2, blocks: [] }), /version/);
+  assert.equal(bad([], { name: '<script>alert(1)</script>' }).name.includes('<'), false, 'names are cleaned');
+});
+
+test('editor: blocks are placed against the face you aim at', () => {
+  const b = { min: new Vector3(-1, -1, -1), max: new Vector3(1, 1, 1) };
+  assert.deepEqual(faceNormal(b, new Vector3(0.2, 1, 0.3)).toArray(), [0, 1, 0]);
+  assert.deepEqual(faceNormal(b, new Vector3(-1, 0.1, 0)).toArray(), [-1, 0, 0]);
+  const top = placementCenter({ box: b, point: new Vector3(0.2, 1, 0.3) }, [4, 2, 4], null, null);
+  assert.deepEqual(top.toArray(), [0, 2, 0.5], 'sits on top, snapped to a half-metre grid');
+  const side = placementCenter({ box: b, point: new Vector3(-1, 0.1, 0) }, [4, 2, 4], null, null);
+  assert.deepEqual(side.toArray(), [-3, 0, 0], 'sits against the side');
+  const air = placementCenter(null, [4, 4, 4], new Vector3(0, 10, 0), new Vector3(0, 0, -1));
+  assert.deepEqual(air.toArray(), [0, 10, -18], 'floats in front when aiming at sky');
+});
+
+test('editor: place, delete, undo, copy, and only one finish', () => {
+  const fakeRenderer = { scene: { add() {} }, buildCourse() {} };
+  const ed = new Editor(fakeRenderer);
+  const lvl = { id: 't', data: { v: 1, name: 'T', blocks: [] } };
+  ed.open(lvl);
+  const cam = { pos: new Vector3(0, 5, 10), yaw: 0, pitch: -Math.atan2(5.5, 6), vel: new Vector3() };
+  // Aim down at the start platform and place an anchor on it.
+  ed.place(cam);
+  assert.equal(lvl.data.blocks.length, 1);
+  const [k, x, y, z] = lvl.data.blocks[0];
+  assert.equal(k, 'a');
+  assert.ok(Math.abs(y - 2) < 1e-9, `anchor sits on the platform (y=${y})`);
+  assert.ok(Math.abs(x) < 1 && z < 10, `placed where aimed (${x}, ${z})`);
+  // Deleting the start platform isn't allowed; deleting the anchor is.
+  const lookAtAnchor = { ...cam, pitch: -Math.atan2(cam.pos.y + 0.35 - y, cam.pos.z - z), yaw: Math.atan2(-(x - cam.pos.x), -(z - cam.pos.z)) };
+  ed.setTool(2);
+  assert.equal(ed.copy(lookAtAnchor), true);
+  assert.equal(ed.tool, 0, 'copy picks up the anchor tool');
+  assert.equal(ed.remove(lookAtAnchor), true);
+  assert.equal(lvl.data.blocks.length, 0);
+  assert.equal(ed.remove(cam), false, 'start platform cannot be deleted');
+  assert.equal(ed.undo(), true);
+  assert.equal(lvl.data.blocks.length, 1, 'undo brings it back');
+  ed.setTool(4);
+  ed.place(cam);
+  ed.place({ ...cam, pitch: 0.3 });
+  assert.equal(lvl.data.blocks.filter((b) => b[0] === 'f').length, 1, 'placing a second finish replaces the first');
+});

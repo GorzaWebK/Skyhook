@@ -1,4 +1,7 @@
-import { isHookable, insideBox, buildTutorialCourse } from './course.js';
+import { isHookable, insideBox, buildTutorialCourse, buildCustomCourse } from './course.js';
+import { Editor, TOOLS } from './editor.js';
+import { encodeLevel, decodeLevel, newLevelId } from './custom.js';
+import { onlineEnabled, submitScore, getLeaderboard, cleanName } from './online.js';
 import { TUTORIAL_STEPS, createTutorialFlags } from './tutorial.js';
 import { LEVELS, MEDALS, buildLevel, medalFor, nextMedal } from './levels.js';
 import { raycast, eyePosition, aimDirection, FIXED_DT, TUNING } from './physics.js';
@@ -22,7 +25,16 @@ const ui = {
   cp: $('cp'), levelLabel: $('level-label'), crosshair: $('crosshair'), toast: $('toast'),
   menu: $('menu'), screens: document.querySelectorAll('.screen'),
   playBtn: $('play-btn'), restartBtn: $('restart-btn'), levelsBtn: $('levels-btn'), controlsBtn: $('controls-btn'),
-  tutorialBtn: $('tutorial-btn'), newHint: $('new-hint'), skinsBtn: $('skins-btn'), skinGrid: $('skin-grid'),
+  tutorialBtn: $('tutorial-btn'), newHint: $('new-hint'), editorBtn: $('editor-btn'),
+  mlNew: $('ml-new'), mlImportToggle: $('ml-import-toggle'), mlImport: $('ml-import'), importCode: $('import-code'),
+  importBtn: $('import-btn'), importMsg: $('import-msg'), mlList: $('ml-list'),
+  mlShare: $('ml-share'), mlShareTitle: $('ml-share-title'), mlShareCode: $('ml-share-code'), mlShareMsg: $('ml-share-msg'),
+  editName: $('edit-name'), editStatus: $('edit-status'), editResume: $('edit-resume'), editTest: $('edit-test'),
+  editShare: $('edit-share'), editShareBox: $('edit-share-box'), editShareCode: $('edit-share-code'),
+  editShareMsg: $('edit-share-msg'), editExit: $('edit-exit'),
+  boardsBtn: $('boards-btn'), boardPrev: $('board-prev'), boardNext: $('board-next'), boardLevel: $('board-level'),
+  boardName: $('board-name'), boardList: $('board-list'), finishBoard: $('finish-board'),
+  epName: $('ep-name'), epTools: $('ep-tools'), epSize: $('ep-size'), epStatus: $('ep-status'), skinsBtn: $('skins-btn'), skinGrid: $('skin-grid'),
   tutorial: $('tutorial'), tutStep: $('tut-step'), tutText: $('tut-text'),
   courseName: $('course-name'), menuBest: $('menu-best'),
   levelGrid: $('level-grid'), levelProgress: $('level-progress'),
@@ -81,6 +93,10 @@ function startAudio() {
   }
 }
 const progress = storage.getProgress();
+if (!settings.playerName) {
+  settings.playerName = `Player${1000 + Math.floor(Math.random() * 9000)}`;
+  storage.setSettings(settings);
+}
 
 function equipSkin(id) {
   const skin = getSkin(id);
@@ -135,8 +151,14 @@ let bot = null;
 let best = null; // { time, splits } or null
 let splits = [];
 
-// 'menu' | 'playing' | 'finished'
+// 'menu' | 'playing' | 'finished' | 'editor'
 let state = 'menu';
+// 'level' (official levels and tutorial) | 'custom' (playing a custom level)
+// | 'test' (test-playing from the editor) | 'editor'
+let mode = 'level';
+let resumeTo = 'play'; // what to do when the pointer lock is (re)gained
+let customLevel = null; // the custom level being played or edited
+let editorCam = null; // where the editor camera was before a test run
 let toastTimer = 0;
 let splitTimer = 0;
 let lastRelease = null;
@@ -151,18 +173,19 @@ function isUnlocked(index) {
 }
 
 function levelTitle(l) {
+  if (l.custom) return `${mode === 'test' ? 'Testing' : 'Custom'}: ${l.name}`;
   return l.tutorial ? 'Tutorial' : `Level ${l.number}: ${l.name}`;
 }
 
 function loadDef(def) {
   level = def;
-  course = def.tutorial ? buildTutorialCourse() : buildLevel(def);
+  course = def.tutorial ? buildTutorialCourse() : def.custom ? buildCustomCourse(def.data) : buildLevel(def);
   run = createRun(course);
   bot = botMode ? createBot(run) : null;
   best = storage.getBest(def.id);
   splits = [];
   renderer.buildCourse(course);
-  if (!def.tutorial) {
+  if (!def.tutorial && !def.custom) {
     progress.last = def.index;
     storage.setProgress(progress);
   }
@@ -170,14 +193,185 @@ function loadDef(def) {
   ui.tutorial.classList.toggle('hidden', !tut);
   if (tut) showTutorialStep();
   ui.finish.classList.add('hidden');
+  ui.finishBoard.classList.add('hidden');
   ui.split.className = '';
-  ui.levelLabel.textContent = def.tutorial ? 'Tutorial' : `Level ${def.number} · ${def.name}`;
+  ui.levelLabel.textContent = def.custom
+    ? (mode === 'test' ? `Testing · ${def.name} (T to edit)` : `Custom · ${def.name}`)
+    : def.tutorial ? 'Tutorial' : `Level ${def.number} · ${def.name}`;
   refreshBest();
   updateCheckpointLabel();
 }
 
 function loadLevel(index) {
+  mode = 'level';
+  customLevel = null;
   loadDef(LEVELS[index]);
+}
+
+// --- Custom levels and the editor ---------------------------------------------
+
+const editor = new Editor(renderer);
+
+function customDef(lvl) {
+  return { id: `custom-${lvl.id}`, custom: true, data: lvl.data, name: lvl.data.name, index: -1, number: 0 };
+}
+
+function saveCustom(lvl) {
+  const list = storage.getCustomLevels().filter((l) => l.id !== lvl.id);
+  list.unshift(lvl);
+  storage.setCustomLevels(list);
+}
+
+function playCustom(lvl) {
+  mode = 'custom';
+  customLevel = lvl;
+  loadDef(customDef(lvl));
+  startPlaying();
+}
+
+function openEditor(lvl) {
+  mode = 'editor';
+  customLevel = lvl;
+  editor.open(lvl); // builds the level's course in the renderer
+  course = editor.course;
+  run = createRun(course);
+  level = customDef(lvl);
+  const p = run.player;
+  if (editorCam && editorCam.id === lvl.id) {
+    p.pos.copy(editorCam.pos);
+    p.yaw = editorCam.yaw;
+    p.pitch = editorCam.pitch;
+  } else {
+    p.pos.set(0, 8, 18);
+    p.yaw = 0;
+    p.pitch = -0.3;
+  }
+  ui.finish.classList.add('hidden');
+  ui.tutorial.classList.add('hidden');
+  tut = null;
+  bot = null;
+  updateEditorPanel();
+  resumeTo = 'editor';
+  startAudio();
+  if (botMode) setState('editor');
+  else input.requestLock();
+}
+
+function startTest() {
+  const p = run.player;
+  editorCam = { id: customLevel.id, pos: p.pos.clone(), yaw: p.yaw, pitch: p.pitch };
+  editor.hidePreview();
+  mode = 'test';
+  loadDef(customDef(customLevel));
+  setState('playing');
+}
+
+function backToEditor() {
+  openEditor(customLevel);
+  setState('editor');
+}
+
+editor.onChange = () => {
+  if (!customLevel) return;
+  saveCustom(customLevel);
+  updateEditorPanel();
+};
+
+function editorSummary(lvl) {
+  const blocks = lvl.data.blocks;
+  const count = (k) => blocks.filter((b) => b[0] === k).length;
+  return { blocks: blocks.length, anchors: count('a'), checkpoints: count('c'), hasFinish: count('f') > 0 };
+}
+
+function updateEditorPanel() {
+  if (!customLevel) return;
+  ui.epName.textContent = customLevel.data.name;
+  ui.epTools.innerHTML = TOOLS.map((t, i) =>
+    `<div class="ep-tool${i === editor.tool ? ' on' : ''}"><i style="background:${t.color}"></i><kbd>${i + 1}</kbd> ${t.name}</div>`).join('');
+  const sz = editor.size();
+  ui.epSize.textContent = `${sz[0]} × ${sz[1]} × ${sz[2]}`;
+  const sum = editorSummary(customLevel);
+  const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+  ui.epStatus.innerHTML = `${plural(sum.blocks, 'block')} · ${plural(sum.anchors, 'anchor')} · ${plural(sum.checkpoints, 'checkpoint')}<br>` +
+    (sum.hasFinish ? '<span class="ok">Finish placed</span>' : '<span class="warn">No finish yet: press 5 and place one</span>') +
+    ` · ${customLevel.tested ? '<span class="ok">Finished once</span>' : '<span class="warn">Not finished yet</span>'}`;
+  ui.editStatus.innerHTML = ui.epStatus.innerHTML;
+}
+
+async function showShareCode(lvl, box, textarea, msg) {
+  box.classList.remove('hidden');
+  msg.className = 'msg';
+  msg.textContent = 'Making code...';
+  try {
+    const code = await encodeLevel(lvl.data);
+    textarea.value = code;
+    textarea.select();
+    let copied = false;
+    try {
+      await navigator.clipboard.writeText(code);
+      copied = true;
+    } catch { /* clipboard blocked: the code is selected for manual copy */ }
+    msg.className = 'msg good';
+    msg.textContent = (copied ? 'Copied to clipboard! ' : 'Select and copy the code. ') +
+      (lvl.tested ? '' : "Tip: finish it once yourself so you know it's possible.");
+  } catch (e) {
+    msg.className = 'msg err';
+    msg.textContent = e.message;
+  }
+}
+
+function buildMyLevels() {
+  const list = storage.getCustomLevels();
+  ui.mlList.innerHTML = list.length ? '' : '<div class="ml-empty">No levels yet. Press <b>+ New level</b> to build one, or import a code from a friend.</div>';
+  for (const lvl of list) {
+    const sum = editorSummary(lvl);
+    const b = storage.getBest(`custom-${lvl.id}`);
+    const row = document.createElement('div');
+    row.className = 'ml-row';
+    row.dataset.id = lvl.id;
+    row.innerHTML = `
+      <div class="ml-info">
+        <div class="ml-name"></div>
+        <div class="ml-meta">${sum.blocks} blocks · ${lvl.own ? 'made by you' : 'imported'} · ${sum.hasFinish ? (b ? `best ${formatTime(b.time)}` : 'not finished yet') : 'no finish yet'}</div>
+      </div>
+      <button class="btn" data-act="play" ${sum.hasFinish ? '' : 'disabled title="Add a finish first"'}>Play</button>
+      <button class="btn" data-act="edit">Edit</button>
+      <button class="btn" data-act="share">Share</button>
+      <button class="btn" data-act="delete">Delete</button>`;
+    row.querySelector('.ml-name').textContent = lvl.data.name; // user text: never as HTML
+    row.addEventListener('click', (e) => {
+      const act = e.target.dataset?.act;
+      if (act === 'play') playCustom(lvl);
+      if (act === 'edit') openEditor(lvl);
+      if (act === 'share') {
+        ui.mlShareTitle.textContent = `Share code: ${lvl.data.name}`;
+        showShareCode(lvl, ui.mlShare, ui.mlShareCode, ui.mlShareMsg);
+      }
+      if (act === 'delete') {
+        if (e.target.dataset.confirm) {
+          storage.setCustomLevels(storage.getCustomLevels().filter((l) => l.id !== lvl.id));
+          buildMyLevels();
+        } else {
+          e.target.dataset.confirm = '1';
+          e.target.textContent = 'Sure?';
+        }
+      }
+    });
+    ui.mlList.appendChild(row);
+  }
+}
+
+function newCustomLevel() {
+  const n = storage.getCustomLevels().filter((l) => l.own).length + 1;
+  const lvl = { id: newLevelId(), own: true, tested: false, data: { v: 1, name: `My Level ${n}`, blocks: [] } };
+  saveCustom(lvl);
+  return lvl;
+}
+
+function exitEditor() {
+  editor.hidePreview();
+  loadLevel(isUnlocked(progress.last) ? progress.last : 0);
+  showScreen('mylevels');
 }
 
 function loadTutorial() {
@@ -244,6 +438,7 @@ function updateCheckpointLabel() {
 
 function restart() {
   restartRun(run);
+  ui.finishBoard.classList.add('hidden');
   if (tut) {
     tut = { flags: createTutorialFlags(), step: 0 };
     showTutorialStep();
@@ -257,12 +452,76 @@ function restart() {
   if (state === 'finished') state = 'playing';
 }
 
+// --- Online leaderboards ------------------------------------------------------
+
+let boardIndex = 0;
+
+function boardRowsHtml(board, limit) {
+  if (!board.rows.length) return '<div class="board-empty">No times yet. Be the first!</div>';
+  const rows = board.rows.slice(0, limit).map((r, i) => {
+    const row = document.createElement('div');
+    row.className = `board-row${r.you ? ' you' : ''}`;
+    row.innerHTML = `<span class="br-rank">${i + 1}</span><span class="br-name"></span><span class="br-time">${formatTime(r.time)}</span>`;
+    row.querySelector('.br-name').textContent = r.name + (r.you ? ' (you)' : ''); // names are user text
+    return row.outerHTML;
+  });
+  if (board.me && board.me.rank > limit) {
+    rows.push(`<div class="board-row you"><span class="br-rank">${board.me.rank}</span><span class="br-name">You</span><span class="br-time">${formatTime(board.me.time)}</span></div>`);
+  }
+  return rows.join('');
+}
+
+async function showBoard() {
+  const l = LEVELS[boardIndex];
+  ui.boardLevel.textContent = `Level ${l.number}: ${l.name}`;
+  ui.boardList.innerHTML = '<div class="board-empty">Loading...</div>';
+  try {
+    const board = await getLeaderboard(l.id, 10);
+    if (LEVELS[boardIndex] !== l) return; // switched level while loading
+    ui.boardList.innerHTML = boardRowsHtml(board, 10);
+  } catch (e) {
+    ui.boardList.innerHTML = `<div class="board-empty err">Couldn't load the leaderboard (${e.message}).</div>`;
+  }
+}
+
+// After finishing an official level: save the time, then show where you are.
+async function submitAndShow(l, time) {
+  if (!onlineEnabled) return;
+  ui.finishBoard.classList.remove('hidden');
+  ui.finishBoard.innerHTML = '<div class="board-title">Online leaderboard</div><div class="board-empty">Saving your time...</div>';
+  try {
+    await submitScore(l.id, settings.playerName, time);
+    const board = await getLeaderboard(l.id, 5);
+    if (level !== l) return;
+    const rank = board.me ? `You're <b>#${board.me.rank}</b> in the world` : '';
+    ui.finishBoard.innerHTML = `<div class="board-title">Online leaderboard · ${rank}</div>${boardRowsHtml(board, 5)}`;
+  } catch (e) {
+    ui.finishBoard.innerHTML = `<div class="board-title">Online leaderboard</div><div class="board-empty err">Couldn't reach the leaderboard (${e.message}).</div>`;
+  }
+}
+
 // --- Menu screens -------------------------------------------------------------
 
 function showScreen(name) {
   for (const s of ui.screens) s.classList.toggle('hidden', s.id !== `screen-${name}`);
   if (name === 'levels') buildLevelGrid();
   if (name === 'skins') buildSkinGrid();
+  if (name === 'boards') {
+    boardIndex = level && !level.custom && !level.tutorial ? level.index : 0;
+    ui.boardName.value = settings.playerName;
+    showBoard();
+  }
+  if (name === 'mylevels') {
+    buildMyLevels();
+    ui.mlShare.classList.add('hidden');
+  }
+  if (name === 'editor-menu') {
+    ui.editName.value = customLevel?.data.name ?? '';
+    ui.editShareBox.classList.add('hidden');
+    ui.editResume.textContent = mode === 'test' ? 'RESUME TEST' : 'RESUME EDITING';
+    ui.editTest.textContent = mode === 'test' ? 'Back to editor (T)' : 'Test level (T)';
+    updateEditorPanel();
+  }
   if (name === 'main') refreshMainScreen();
 }
 
@@ -310,6 +569,9 @@ function setState(next) {
   state = next;
   ui.menu.classList.toggle('hidden', state !== 'menu');
   ui.hud.classList.toggle('hidden', state === 'menu');
+  ui.hud.classList.toggle('editing', state === 'editor');
+  renderer.showViewModel = state !== 'editor';
+  if (state !== 'editor') editor.hidePreview();
   if (state !== 'finished') ui.finish.classList.add('hidden');
   if (state === 'menu') showScreen('main');
 }
@@ -337,8 +599,38 @@ function finishTutorial(e) {
   ui.finish.classList.remove('hidden');
 }
 
+function finishCustom(e) {
+  sound.finish();
+  const skinsBefore = unlockedSkinIds();
+  const isRecord = !best || e.time < best.time;
+  if (isRecord) {
+    best = { time: e.time, splits: [...splits] };
+    storage.setBest(level.id, best);
+    refreshBest();
+  }
+  customLevel.tested = true;
+  saveCustom(customLevel);
+  // Finishing a level you built yourself (with a real course in it) unlocks
+  // the Architect gun skin.
+  if (customLevel.own && editorSummary(customLevel).blocks >= 5 && !progress.editorFinished) {
+    progress.editorFinished = true;
+    storage.setProgress(progress);
+  }
+  ui.finishTitle.textContent = mode === 'test' ? 'Test run complete!' : `${level.name} complete!`;
+  ui.finishTime.textContent = formatTime(e.time);
+  ui.finishNote.textContent = isRecord ? 'New best on this level!' : `Best: ${formatTime(best.time)}`;
+  ui.finishNote.className = isRecord ? 'record' : '';
+  ui.finishMedal.innerHTML = announceNewSkins(skinsBefore);
+  ui.finishHint.innerHTML = mode === 'test'
+    ? '<kbd>T</kbd> back to editor · <kbd>R</kbd> fly again · <kbd>Esc</kbd> menu'
+    : '<kbd>R</kbd> fly again · <kbd>Esc</kbd> menu';
+  state = 'finished';
+  ui.finish.classList.remove('hidden');
+}
+
 function finishLevel(e) {
   if (level.tutorial) return finishTutorial(e);
+  if (level.custom) return finishCustom(e);
   sound.finish();
   const isRecord = !best || e.time < best.time;
   const skinsBefore = unlockedSkinIds();
@@ -367,6 +659,7 @@ function finishLevel(e) {
     ? `<div class="fm-next">Next: ${medalBadge(next)} ${MEDAL_NAME[next]} at ${formatTime(level.medals[next])}</div>`
     : bestMedal === 'gold' ? '<div class="fm-next">You have gold on this level!</div>' : '';
   if (newMedal) sound.medal(runMedal);
+  submitAndShow(level, e.time);
   ui.finishMedal.innerHTML += announceNewSkins(skinsBefore);
   const hasNext = level.index + 1 < LEVELS.length;
   if (hasNext && progress.unlocked < level.index + 2) {
@@ -429,6 +722,11 @@ function currentAim() {
 }
 
 input.handlers.hookDown = () => {
+  if (state === 'editor') {
+    editor.place(run.player);
+    sound.attach();
+    return;
+  }
   if (state !== 'playing') return;
   renderer.fire();
   if (hook(run, currentAim())) {
@@ -444,9 +742,29 @@ input.handlers.hookUp = () => {
   if (r.hopped) sound.hop();
   else if (r.released) sound.release();
 };
+input.handlers.altDown = () => {
+  if (state === 'editor' && editor.remove(run.player)) sound.release();
+};
+input.handlers.wheel = (dir) => {
+  if (state === 'editor') editor.cycleSize(dir);
+};
+
+function editorKey(code) {
+  const digit = /^Digit([1-5])$/.exec(code);
+  if (digit) editor.setTool(Number(digit[1]) - 1);
+  if (code === 'BracketRight') editor.cycleSize(1);
+  if (code === 'BracketLeft') editor.cycleSize(-1);
+  if (code === 'KeyR') editor.rotate();
+  if (code === 'KeyQ') editor.copy(run.player);
+  if (code === 'KeyZ' && editor.undo()) sound.release();
+  if (code === 'KeyT') startTest();
+}
+
 input.handlers.key = (code) => {
+  if (state === 'editor') return editorKey(code);
+  if (code === 'KeyT' && mode === 'test' && state !== 'menu') return backToEditor();
   if (code === 'KeyR' && state !== 'menu') restart();
-  if ((code === 'KeyN' || code === 'Enter') && state === 'finished' && level.index + 1 < LEVELS.length) {
+  if ((code === 'KeyN' || code === 'Enter') && state === 'finished' && !level.custom && level.index + 1 < LEVELS.length) {
     loadLevel(level.index + 1); // the tutorial's index is -1, so this goes to level 1
     state = 'playing';
   }
@@ -466,15 +784,20 @@ ui.mute.checked = settings.muted;
 input.handlers.lockChange = (locked) => {
   if (locked) {
     if (state === 'menu') {
+      if (resumeTo === 'editor') return setState('editor');
       if (run.finished) restart();
       setState('playing');
     }
   } else if (!botMode) {
+    const inEditor = state === 'editor' || mode === 'test';
+    resumeTo = state === 'editor' ? 'editor' : 'play';
     setState('menu');
+    if (inEditor) showScreen('editor-menu');
   }
 };
 
 function startPlaying() {
+  if (mode !== 'editor') resumeTo = 'play';
   startAudio();
   if (botMode) {
     if (run.finished) restart();
@@ -492,6 +815,67 @@ ui.restartBtn.addEventListener('click', () => {
 ui.levelsBtn.addEventListener('click', () => showScreen('levels'));
 ui.controlsBtn.addEventListener('click', () => showScreen('controls'));
 ui.skinsBtn.addEventListener('click', () => showScreen('skins'));
+ui.editorBtn.addEventListener('click', () => showScreen('mylevels'));
+ui.boardsBtn.classList.toggle('hidden', !onlineEnabled);
+ui.boardsBtn.addEventListener('click', () => showScreen('boards'));
+ui.boardPrev.addEventListener('click', () => {
+  boardIndex = (boardIndex + LEVELS.length - 1) % LEVELS.length;
+  showBoard();
+});
+ui.boardNext.addEventListener('click', () => {
+  boardIndex = (boardIndex + 1) % LEVELS.length;
+  showBoard();
+});
+ui.boardName.addEventListener('change', () => {
+  settings.playerName = cleanName(ui.boardName.value);
+  ui.boardName.value = settings.playerName;
+  storage.setSettings(settings);
+});
+ui.mlNew.addEventListener('click', () => openEditor(newCustomLevel()));
+ui.mlImportToggle.addEventListener('click', () => {
+  ui.mlImport.classList.toggle('hidden');
+  ui.importMsg.textContent = '';
+});
+ui.importBtn.addEventListener('click', async () => {
+  try {
+    const data = await decodeLevel(ui.importCode.value);
+    saveCustom({ id: newLevelId(), own: false, tested: false, data });
+    ui.importMsg.className = 'msg good';
+    ui.importMsg.textContent = `Imported "${data.name}" (${data.blocks.length} blocks).`;
+    ui.importCode.value = '';
+    buildMyLevels();
+  } catch (e) {
+    ui.importMsg.className = 'msg err';
+    ui.importMsg.textContent = e.message;
+  }
+});
+ui.editResume.addEventListener('click', () => {
+  if (mode === 'test') {
+    resumeTo = 'play';
+    input.requestLock();
+  } else {
+    resumeTo = 'editor';
+    input.requestLock();
+  }
+});
+ui.editTest.addEventListener('click', () => {
+  if (mode === 'test') {
+    openEditor(customLevel);
+  } else {
+    startTest();
+    setState('menu'); // startTest set playing; wait for the pointer lock
+    resumeTo = 'play';
+    input.requestLock();
+  }
+});
+ui.editShare.addEventListener('click', () => showShareCode(customLevel, ui.editShareBox, ui.editShareCode, ui.editShareMsg));
+ui.editExit.addEventListener('click', exitEditor);
+ui.editName.addEventListener('input', () => {
+  if (!customLevel) return;
+  customLevel.data.name = ui.editName.value.replace(/[<>]/g, '').slice(0, 24) || 'Untitled';
+  saveCustom(customLevel);
+  updateEditorPanel();
+});
 ui.tutorialBtn.addEventListener('click', () => {
   loadTutorial();
   startPlaying();
@@ -539,7 +923,16 @@ function frame(now) {
   let mx = 0;
   let my = 0;
   let move = { forward: 0, right: 0, reel: false };
-  if (state === 'playing' || state === 'finished') {
+  if (state === 'editor') {
+    [mx, my] = input.consumeMouse();
+    const k = 0.0022 * settings.sensitivity;
+    p.yaw -= mx * k;
+    p.pitch = Math.max(-1.55, Math.min(1.55, p.pitch - my * k));
+    const m = input.movement();
+    editor.fly(p, { forward: m.forward, right: m.right, up: input.keys.has('Space'), down: input.keys.has('ShiftLeft') || input.keys.has('ControlLeft') }, dt);
+    editor.updatePreview(p);
+    accumulator = 0;
+  } else if (state === 'playing' || state === 'finished') {
     [mx, my] = input.consumeMouse();
     const k = 0.0022 * settings.sensitivity;
     p.yaw -= mx * k;
@@ -562,8 +955,8 @@ function frame(now) {
   }
 
   // What would the hook grab right now?
-  const target = state === 'menu' ? null : raycast(course, eyePosition(p), currentAim());
-  ui.crosshair.className = p.hook || p.pending ? 'hooked' : target && isHookable(target.box) ? 'in-range' : target ? 'blocked' : '';
+  const target = state === 'menu' || state === 'editor' ? null : raycast(course, eyePosition(p), currentAim());
+  ui.crosshair.className = state === 'editor' ? 'editor' : p.hook || p.pending ? 'hooked' : target && isHookable(target.box) ? 'in-range' : target ? 'blocked' : '';
   if (tut && state === 'playing') updateTutorial(target);
 
   ui.timer.textContent = formatTime(run.time);
@@ -596,6 +989,10 @@ window.__skyhook = {
   get lastRelease() { return lastRelease; },
   renderer, restart, loadLevel, loadTutorial, formatTime, TUNING, medalCounts,
   get skin() { return settings.skin; },
+  get mode() { return mode; },
+  get customLevel() { return customLevel; },
+  editor, openEditor, newCustomLevel, startTest, backToEditor, encodeLevel, decodeLevel,
+  online: { submitScore, getLeaderboard },
   get music() { return music; },
   Music,
 };

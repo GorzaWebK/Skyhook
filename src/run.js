@@ -75,7 +75,7 @@ export function tick(run, input, dt = FIXED_DT) {
     }
   }
 
-  if (insideBox(p.pos, course.finish.trigger)) {
+  if (course.finish && insideBox(p.pos, course.finish.trigger)) {
     run.finished = true;
     releaseHook(p);
     events.push({ type: 'finish', time: run.time });

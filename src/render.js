@@ -242,12 +242,15 @@ export class Renderer {
       this.courseGroup.add(beam, ring);
       return { beam, ring };
     });
-    const fBeam = makeBeam(course.finish.trigger, '#ffd36b');
-    const fRingCenter = course.finish.platform.center.clone();
-    fRingCenter.y += 8;
-    const fRing = makeRing(fRingCenter, 7, '#ffcf4d');
-    this.courseGroup.add(fBeam, fRing);
-    this.finishFx = { beam: fBeam, ring: fRing };
+    this.finishFx = null;
+    if (course.finish) {
+      const fBeam = makeBeam(course.finish.trigger, '#ffd36b');
+      const fRingCenter = course.finish.platform.center.clone();
+      fRingCenter.y += 8;
+      const fRing = makeRing(fRingCenter, 7, '#ffcf4d');
+      this.courseGroup.add(fBeam, fRing);
+      this.finishFx = { beam: fBeam, ring: fRing };
+    }
   }
 
   setCheckpointReached(index) {
@@ -377,8 +380,10 @@ export class Renderer {
 
     this.renderer.clear();
     this.renderer.render(this.scene, cam);
-    this.renderer.clearDepth();
-    this.renderer.render(this.viewModel.scene, this.viewModel.camera);
+    if (this.showViewModel !== false) {
+      this.renderer.clearDepth();
+      this.renderer.render(this.viewModel.scene, this.viewModel.camera);
+    }
   }
 }
 

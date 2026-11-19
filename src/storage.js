@@ -27,4 +27,7 @@ export const storage = {
   // unlocked: how many levels are open (level 1 always is); last: last level played
   getProgress: () => ({ unlocked: 1, last: 0, ...get('progress', {}) }),
   setProgress: (p) => set('progress', p),
+  // Levels made in the editor (or imported): [{ id, data: { v, name, blocks }, own, tested }]
+  getCustomLevels: () => get('custom', []),
+  setCustomLevels: (list) => set('custom', list),
 };

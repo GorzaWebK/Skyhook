@@ -160,6 +160,51 @@
       .sw-ring { left: 20%; top: 26%; width: 9%; height: 46%; border: 3px solid var(--glow); border-radius: 50%; box-shadow: 0 0 8px var(--glow); box-sizing: border-box; }
       .sw-grip { left: 56%; top: 60%; width: 10%; height: 34%; background: var(--dark); border-radius: 2px; transform: skewX(-12deg); }
       .fm-skin { margin-top: 10px; padding: 8px 10px; border-radius: 8px; background: rgba(255, 138, 61, 0.15); border: 1px solid rgba(255, 138, 61, 0.5); font-size: 14px; }
+      #editor-panel { display: none; position: absolute; left: 16px; top: 16px; width: 300px; padding: 12px 14px; border-radius: 12px;
+        background: var(--panel); border: 1px solid rgba(255,255,255,0.14); font-size: 13px; line-height: 1.5; }
+      #hud.editing #editor-panel { display: block; }
+      #hud.editing .timer-box, #hud.editing #speed, #hud.editing .hud-right, #hud.editing #tutorial { display: none; }
+      .ep-title { font-weight: 800; letter-spacing: 1px; color: var(--accent); margin-bottom: 6px; }
+      #ep-tools { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 6px; }
+      .ep-tool { padding: 3px 6px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.12); display: flex; align-items: center; gap: 6px; }
+      .ep-tool.on { border-color: var(--accent); background: rgba(255,138,61,0.18); }
+      .ep-tool i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+      .ep-dim { color: var(--muted); font-size: 12px; }
+      .ep-keys { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 8px; margin: 6px 0; color: var(--muted); font-size: 12px; }
+      .ep-keys kbd { font-size: 10px; }
+      #ep-status { border-top: 1px solid rgba(255,255,255,0.1); padding-top: 6px; }
+      .warn { color: #ffb36b; }
+      .ok { color: #7dff9a; }
+      .btn.primary { background: var(--accent); color: #1a0d03; border-color: var(--accent); }
+      .btn.small { width: auto; padding: 7px 14px; margin: 0; display: inline-block; }
+      .panel { margin: 10px 0 0; padding: 10px; border-radius: 10px; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.12); }
+      .panel textarea, .field input { width: 100%; box-sizing: border-box; margin: 6px 0; padding: 8px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2);
+        background: rgba(0,0,0,0.3); color: var(--text); font: 12px ui-monospace, Consolas, monospace; resize: vertical; user-select: text; }
+      .field { display: block; font-size: 14px; color: var(--muted); margin-top: 8px; }
+      .field input { font: 15px system-ui, sans-serif; }
+      .row { display: flex; align-items: center; gap: 10px; }
+      .msg { font-size: 13px; color: var(--muted); }
+      .msg.err { color: #ff7a7a; } .msg.good { color: #7dff9a; }
+      .muted-note { color: var(--muted); font-size: 14px; }
+      #ml-list { margin: 12px 0 4px; display: flex; flex-direction: column; gap: 8px; }
+      .ml-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); }
+      .ml-info { flex: 1; min-width: 0; }
+      .ml-name { font-weight: 700; }
+      .ml-meta { font-size: 12px; color: var(--muted); }
+      .ml-row .btn { width: auto; margin: 0; padding: 7px 12px; font-size: 13px; }
+      .ml-empty { color: var(--muted); text-align: center; padding: 18px; }
+      #crosshair.editor::before, #crosshair.editor::after { background: #ffffff; }
+      .board-pick { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 6px 0 10px; }
+      #board-list, #finish-board { display: flex; flex-direction: column; gap: 4px; }
+      #finish-board { margin-top: 10px; text-align: left; }
+      .board-title { font-size: 13px; color: var(--muted); margin-bottom: 2px; }
+      .board-row { display: grid; grid-template-columns: 34px 1fr auto; gap: 8px; padding: 6px 10px; border-radius: 8px; background: rgba(255,255,255,0.06); font-size: 14px; }
+      .board-row.you { background: rgba(255,138,61,0.2); box-shadow: 0 0 0 1px var(--accent) inset; }
+      .br-rank { font-weight: 800; color: var(--gold); }
+      .br-time { font-family: ui-monospace, Consolas, monospace; }
+      .br-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .board-empty { color: var(--muted); font-size: 14px; padding: 8px; text-align: center; }
+      .board-empty.err { color: #ff9a9a; }
       .footer { margin-top: 16px; font-size: 12px; color: var(--muted); }
       .hud-right { position: absolute; top: 18px; right: 22px; text-align: right; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.45); }
       #level-label { font-size: 15px; font-weight: 700; }
@@ -208,6 +253,18 @@
       <div id="toast"></div>
       <div id="tutorial" class="hidden"><div id="tut-step"></div><div id="tut-text"></div></div>
       <div id="speed">0<small>m/s</small></div>
+      <div id="editor-panel">
+        <div class="ep-title">LEVEL EDITOR · <span id="ep-name"></span></div>
+        <div id="ep-tools"></div>
+        <div class="ep-size">Size <b id="ep-size"></b> <span class="ep-dim">(wheel or [ ] · R rotate)</span></div>
+        <div class="ep-keys">
+          <span><kbd>Left click</kbd> place</span><span><kbd>Right click</kbd> delete</span>
+          <span><kbd>Q</kbd> copy block</span><span><kbd>Z</kbd> undo</span>
+          <span><kbd>WASD</kbd> fly</span><span><kbd>Space</kbd>/<kbd>Shift</kbd> up/down</span>
+          <span><kbd>T</kbd> test</span><span><kbd>Esc</kbd> menu</span>
+        </div>
+        <div id="ep-status"></div>
+      </div>
     </div>
 
     <div id="menu" class="overlay">
@@ -220,9 +277,11 @@
         <div class="btn-row">
           <button class="btn" id="levels-btn">Levels</button>
           <button class="btn" id="tutorial-btn">Tutorial</button>
+          <button class="btn" id="boards-btn">Leaderboards</button>
         </div>
         <div class="btn-row">
           <button class="btn" id="skins-btn">Gun</button>
+          <button class="btn" id="editor-btn">Level editor</button>
           <button class="btn" id="controls-btn">Controls</button>
         </div>
         <p class="new-hint" id="new-hint">New here? Start with the <b>Tutorial</b>.</p>
@@ -245,6 +304,7 @@
           <span><kbd>N</kbd></span><span>Next level (after finishing)</span>
           <span><kbd>M</kbd></span><span>Mute sound</span>
           <span><kbd>Esc</kbd></span><span>Pause</span>
+          <span><kbd>T</kbd></span><span>Level editor: test your level / back to editing</span>
         </div>
         <p class="hint">Orange blocks and grey pillars can be hooked. Dark smooth blocks can't. The crosshair turns orange when you're aiming at something you can grab. Fall into the clouds and you go back to your last checkpoint.</p>
         <button class="btn" data-back>Back</button>
@@ -255,6 +315,53 @@
         <p class="sub">Pick a look for your gun. Earn medals to unlock more.</p>
         <div id="skin-grid"></div>
         <button class="btn" data-back>Back</button>
+      </div>
+
+      <div id="screen-boards" class="card screen hidden">
+        <h2>Leaderboards</h2>
+        <div class="board-pick">
+          <button class="btn small" id="board-prev">&#9664;</button>
+          <b id="board-level"></b>
+          <button class="btn small" id="board-next">&#9654;</button>
+        </div>
+        <div id="board-list"></div>
+        <label class="field">Your name on the leaderboards <input id="board-name" maxlength="16" /></label>
+        <p class="hint">Letters, numbers, spaces and _ . - only. A new name shows up next time you set a time.</p>
+        <button class="btn" data-back>Back</button>
+      </div>
+
+      <div id="screen-mylevels" class="card screen wide hidden">
+        <div class="levels-head"><h2>My Levels</h2><span class="muted-note">Build your own courses and share them with a code.</span></div>
+        <div class="btn-row">
+          <button class="btn primary" id="ml-new">+ New level</button>
+          <button class="btn" id="ml-import-toggle">Import a code</button>
+        </div>
+        <div id="ml-import" class="panel hidden">
+          <textarea id="import-code" rows="3" placeholder="Paste a level code (starts with SKY1.)"></textarea>
+          <div class="row"><button class="btn small" id="import-btn">Import</button><span id="import-msg" class="msg"></span></div>
+        </div>
+        <div id="ml-share" class="panel hidden">
+          <div class="row"><b id="ml-share-title">Share code</b><span id="ml-share-msg" class="msg"></span></div>
+          <textarea id="ml-share-code" rows="3" readonly></textarea>
+        </div>
+        <div id="ml-list"></div>
+        <button class="btn" data-back>Back</button>
+      </div>
+
+      <div id="screen-editor-menu" class="card screen hidden">
+        <h2>Level editor</h2>
+        <label class="field">Level name <input id="edit-name" maxlength="24" /></label>
+        <p id="edit-status" class="hint"></p>
+        <button class="play" id="edit-resume">RESUME EDITING</button>
+        <div class="btn-row">
+          <button class="btn" id="edit-test">Test level (T)</button>
+          <button class="btn" id="edit-share">Share code</button>
+        </div>
+        <div id="edit-share-box" class="panel hidden">
+          <div class="row"><b>Share code</b><span id="edit-share-msg" class="msg"></span></div>
+          <textarea id="edit-share-code" rows="3" readonly></textarea>
+        </div>
+        <button class="btn" id="edit-exit">Exit to My Levels</button>
       </div>
 
       <div id="screen-levels" class="card screen wide hidden">
@@ -270,6 +377,7 @@
         <div id="finish-time">0:00.000</div>
         <div id="finish-note"></div>
         <div id="finish-medal"></div>
+        <div id="finish-board" class="hidden"></div>
         <div class="hint" id="finish-hint"></div>
       </div>
     </div>

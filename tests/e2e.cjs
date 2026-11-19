@@ -284,6 +284,85 @@ async function waitForServer() {
     await g(() => document.exitPointerLock());
     await page.waitForTimeout(300);
 
+    // Level editor: build, test, share and import with real input.
+    await page.goto(URL);
+    await page.waitForTimeout(1000);
+    await page.click('#editor-btn');
+    check(await page.isVisible('#screen-mylevels') && (await page.textContent('#ml-list')).includes('No levels yet'), 'Level editor button opens My Levels (empty at first)');
+    await page.click('#ml-new');
+    await page.waitForTimeout(800);
+    check(await g(() => window.__skyhook.state === 'editor' && !!document.pointerLockElement) && await page.isVisible('#editor-panel'), 'New level opens the editor with its help panel');
+    const blocks = () => g(() => window.__skyhook.customLevel.data.blocks.length);
+    await g(() => { const p = window.__skyhook.run.player; p.pos.set(0, 5, 10); p.yaw = 0; p.pitch = -Math.atan2(5.35, 6); });
+    await page.waitForTimeout(300);
+    await page.mouse.down(); await page.mouse.up();
+    await page.waitForTimeout(300);
+    check((await blocks()) === 1 && await g(() => window.__skyhook.customLevel.data.blocks[0][0] === 'a'), 'left click places an anchor where you aim');
+    await page.keyboard.press('Digit3');
+    const size0 = await page.textContent('#ep-size');
+    await page.mouse.wheel(0, 100);
+    await page.waitForTimeout(200);
+    check((await page.textContent('.ep-tool.on')).includes('Platform') && (await page.textContent('#ep-size')) !== size0, 'number keys pick the block type, mouse wheel changes size');
+    await g(() => {
+      const s = window.__skyhook; const p = s.run.player; const [, x, y, z] = s.customLevel.data.blocks[0];
+      p.yaw = Math.atan2(-(x - p.pos.x), -(z - p.pos.z)); p.pitch = -Math.atan2(p.pos.y + 0.35 - y, Math.hypot(x - p.pos.x, z - p.pos.z));
+    });
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: 'test-results/editor.png' });
+    await page.mouse.down({ button: 'right' }); await page.mouse.up({ button: 'right' });
+    await page.waitForTimeout(300);
+    check((await blocks()) === 0, 'right click deletes the block you aim at');
+    await page.keyboard.press('KeyZ');
+    await page.waitForTimeout(300);
+    check((await blocks()) === 1, 'Z undoes');
+
+    // "Build" the rest quickly, then test-play it.
+    await g(() => {
+      const s = window.__skyhook;
+      s.customLevel.data.blocks = [
+        ['a', 0, 20, -26, 6, 6, 6], ['a', 0, 22, -54, 6, 6, 6], ['a', 5, 25, -82, 5.5, 5.5, 5.5],
+        ['c', 5, 6.25, -104, 11, 1.5, 11], ['a', 0, 24, -128, 5.5, 5.5, 5.5], ['f', 0, 7, -214, 18, 2, 18],
+      ];
+      s.editor.rebuild();
+    });
+    await page.keyboard.press('KeyT');
+    await page.waitForTimeout(500);
+    check(await g(() => window.__skyhook.mode === 'test' && window.__skyhook.state === 'playing' && window.__skyhook.course.anchors.length === 4), 'T test-plays the level');
+    await g(() => window.__skyhook.run.player.pos.copy(window.__skyhook.course.finish.trigger.center));
+    await page.waitForTimeout(500);
+    check((await page.textContent('#finish-title')) === 'Test run complete!', 'finishing your level in a test run');
+    check((await page.textContent('#finish-medal')).includes('Architect'), 'finishing your own level unlocks the Architect gun skin');
+    await page.keyboard.press('KeyT');
+    await page.waitForTimeout(500);
+    check(await g(() => window.__skyhook.state === 'editor' && window.__skyhook.mode === 'editor'), 'T goes back to the editor');
+
+    await g(() => document.exitPointerLock());
+    await page.waitForTimeout(400);
+    check(await page.isVisible('#screen-editor-menu'), 'Esc in the editor opens the editor menu');
+    await page.fill('#edit-name', 'Sky Bridge');
+    await page.click('#edit-share');
+    let code = '';
+    for (let i = 0; i < 20 && !code; i++) { await page.waitForTimeout(100); code = await page.inputValue('#edit-share-code'); }
+    check(/^SKY1\.[A-Za-z0-9_-]+$/.test(code), `Share code is produced (${code.length} characters)`);
+    await page.click('#edit-exit');
+    await page.waitForTimeout(400);
+    check((await page.textContent('#ml-list')).includes('Sky Bridge') && (await page.textContent('#ml-list')).includes('made by you'), 'the level is saved in My Levels under its new name');
+
+    await page.click('#ml-import-toggle');
+    await page.fill('#import-code', 'not a code');
+    await page.click('#import-btn');
+    await page.waitForTimeout(200);
+    check((await page.textContent('#import-msg')).includes("doesn't look like"), 'importing junk shows a clear error');
+    await page.fill('#import-code', code);
+    await page.click('#import-btn');
+    await page.waitForTimeout(300);
+    check((await page.textContent('#import-msg')).includes('Imported "Sky Bridge"') && (await page.$$('.ml-row')).length === 2, 'importing a share code adds the level');
+    await page.click('.ml-row:first-child [data-act="play"]');
+    await page.waitForTimeout(800);
+    check(await g(() => window.__skyhook.mode === 'custom' && window.__skyhook.state === 'playing' && window.__skyhook.course.custom), 'an imported level can be played');
+    await g(() => document.exitPointerLock());
+    await page.waitForTimeout(300);
+
     // Late levels render with smooth blocks and no errors.
     await page.goto(`${URL}?unlock=all&level=30`);
     await page.waitForTimeout(1500);

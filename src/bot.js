@@ -24,7 +24,7 @@ export function botInput(bot) {
   }
 
   const a = anchors[bot.target];
-  const aimPoint = a ? a.center : run.course.finish.trigger.center;
+  const aimPoint = a ? a.center : run.course.finish?.trigger.center ?? p.pos;
 
   // Face the next target.
   const dx = aimPoint.x - p.pos.x;
@@ -54,7 +54,7 @@ export function botInput(bot) {
     bot.holdTime += 1 / 120;
     input.reel = p.hook.length > 16;
     // Let go once past the anchor and heading towards the next target.
-    const next = anchors[bot.target + 1]?.center ?? run.course.finish.trigger.center;
+    const next = anchors[bot.target + 1]?.center ?? run.course.finish?.trigger.center ?? a.center;
     const nx = next.x - p.pos.x;
     const nz = next.z - p.pos.z;
     const hv = Math.hypot(p.vel.x, p.vel.z);

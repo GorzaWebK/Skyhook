@@ -46,6 +46,14 @@ The full controls list sits behind the **Controls** button on the main menu.
 - **Timer and best times:** The clock starts when you leave the start platform. Your best time and checkpoint splits for each level, and which levels you've unlocked, are saved in the browser.
 - **Splits:** At each checkpoint you see how far ahead (green) or behind (red) your best run you are.
 - **Falling:** Drop into the clouds and you go back to your last checkpoint while the clock keeps running. Before the first checkpoint, the run starts over.
+- **Level editor:** Build your own courses from **Level editor** on the main menu.
+  - **Building:** Fly around freely (WASD, Space up, Shift down) and place blocks where you aim: **1** anchor, **2** smooth block, **3** platform, **4** checkpoint, **5** finish.
+  - **Editing:** Left click places, right click deletes, the mouse wheel or **[ ]** changes size, **R** rotates, **Q** copies the block you're aiming at, and **Z** undoes.
+  - **Testing:** **T** test-plays your level and **T** again takes you back to editing.
+  - **My Levels:** Every change saves automatically. My Levels lists your levels with Play, Edit, Share and Delete.
+  - **Sharing:** **Share** gives a short code (it starts with `SKY1.`) that a friend can paste into **Import a code**.
+  - Finishing a level you built yourself unlocks the **Architect** gun skin.
+- **Online leaderboards:** A top 10 for every level, with your world rank shown on the finish screen and a **Leaderboards** page (with your player name) on the main menu. It's switched off until the Firebase config is added (see "Online leaderboards" below).
 - **Grapple gun:** You hold a grapple gun in a gloved hand, drawn in first person and built from shapes in code. It sways as you look around, bobs as you walk, leans when you strafe, kicks when you fire, and its glowing spool spins when you reel in.
 - **Rope shot:** The hook visibly flies from the gun's muzzle to the block at 250 m/s, with the rope wiggling behind it, and catches when it lands. Let go before it lands and the shot is cancelled. The rope snaps taut when it catches and sags when it goes slack.
 - **Music:** A generated soundtrack (A minor, 100 BPM) that builds with your speed. A calm pad and bass play in the menu or when standing still. An arpeggio joins when you move, kick and hi-hats when you swing fast, and snare and a busier bass when you're flying. It has its own volume slider in the menu, and **M** mutes everything.
@@ -68,6 +76,11 @@ The full controls list sits behind the **Controls** button on the main menu.
 | `src/run.js` | Timer, checkpoints, finish, respawn |
 | `src/course.js` | Level generator and difficulty settings |
 | `src/levels.js` | The 30 levels: names and seeds |
+| `src/editor.js` | Level editor: placing, deleting, undo, flying |
+| `src/custom.js` | Custom level checks and share codes |
+| `src/online.js` | Online leaderboards (Firebase) |
+| `src/online-config.js` | Firebase web config (null = online off) |
+| `firebase/database.rules.json` | Security rules for the leaderboards |
 | `src/skins.js` | Gun skins and their unlock rules |
 | `src/tutorial.js` | Tutorial steps and when each one is ticked off |
 | `src/render.js` | three.js scene, sky, clouds, hook head |
@@ -87,8 +100,16 @@ npm install
 npm run dev        # dev server at http://localhost:5173
 npm test           # physics + level tests (Node), includes the autopilot finishing all 30 levels
 npm run e2e        # build, then full browser test with Playwright + Chromium
+npm run test:online  # leaderboard + security rules tests on local Firebase emulators (needs Java)
 npm run build      # production build into dist/
 ```
+
+## Online leaderboards
+
+- Scores are stored in the Firebase Realtime Database of the shared `foundry-arena` project, at `skyhook/scores/<level>/<player id>`. Players sign in anonymously behind the scenes.
+- Each player has one entry per level: their best time. The security rules in `firebase/database.rules.json` only allow you to write your own entry and only to improve your time. They also check names (1–16 letters, digits, spaces or `_ . -`), times (3 s or more) and level names, and allow no extra fields.
+- Online is switched **off** while `src/online-config.js` contains `null`. Put the project's web config there to switch it on.
+- `npm run test:online` runs the rules and leaderboard tests against the local Firebase emulators. Java is needed for the database emulator.
 
 ## Deploying
 
@@ -97,7 +118,5 @@ Every push to `main` runs the tests, builds and deploys to GitHub Pages via `.gi
 ## Roadmap ideas
 
 - Ghost replay of your best run (and the world record)
-- Online leaderboards
 - Daily course from a shared seed
 - Moving anchors and obstacles
-- Course editor and sharing

@@ -176,6 +176,55 @@ export function buildTutorialCourse() {
   };
 }
 
+// --- Custom levels (level editor) ---------------------------------------------
+// A custom level is { v: 1, name, blocks: [[kind, x, y, z, sx, sy, sz], ...] }
+// with kind one of: a = anchor, b = smooth block, p = platform,
+// c = checkpoint (in the order placed), f = finish (at most one).
+// The start platform at the origin is always there and isn't stored.
+
+export const CUSTOM_KINDS = { a: 'anchor', b: 'blocker', p: 'platform', c: 'checkpoint', f: 'finish' };
+
+export function buildCustomCourse(data) {
+  const boxes = [];
+  const anchors = [];
+  const checkpoints = [];
+  const { spawn, startZone } = startArea(boxes);
+  let finish = null;
+  let lowest = 0;
+
+  for (const [k, x, y, z, sx, sy, sz] of data.blocks) {
+    const kind = CUSTOM_KINDS[k];
+    if (!kind) continue;
+    const b = box(new Vector3(x, y, z), new Vector3(sx, sy, sz), kind);
+    boxes.push(b);
+    lowest = Math.min(lowest, b.min.y);
+    const top = b.max.y;
+    if (kind === 'anchor') anchors.push(b);
+    if (kind === 'checkpoint') {
+      const w = Math.max(sx, 14);
+      const d = Math.max(sz, 14);
+      checkpoints.push({
+        index: checkpoints.length,
+        platform: b,
+        trigger: trigger(new Vector3(x, top + 20, z), new Vector3(w, 40, d)),
+        spawn: { pos: new Vector3(x, top + 0.51, z + Math.min(3, sz / 2 - 0.6)), yaw: 0 },
+      });
+    }
+    if (kind === 'finish') {
+      finish = {
+        platform: b,
+        trigger: trigger(new Vector3(x, top + 25, z), new Vector3(Math.max(sx, 20), 50, Math.max(sz, 20))),
+      };
+    }
+  }
+
+  return {
+    seed: 0, boxes, anchors, checkpoints, finish, spawn, startZone,
+    killY: Math.min(-45, lowest - 25),
+    custom: true,
+  };
+}
+
 export function insideBox(p, b) {
   return (
     p.x >= b.min.x && p.x <= b.max.x &&
