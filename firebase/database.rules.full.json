@@ -384,6 +384,53 @@
             }
           }
         }
+      },
+      "levels": {
+        ".read": true,
+        ".indexOn": [
+          "at"
+        ],
+        "$id": {
+          ".write": "auth != null && (data.exists() ? data.child('uid').val() === auth.uid : newData.child('uid').val() === auth.uid)",
+          ".validate": "$id.matches(/^[A-Za-z0-9]{12}$/) && newData.hasChildren(['uid', 'name', 'author', 'code', 'blocks', 'at']) && newData.child('at').val() === now && newData.parent().parent().child('publishers').child(auth.uid).val() === now && (!root.child('skyhook').child('publishers').child(auth.uid).exists() || now - root.child('skyhook').child('publishers').child(auth.uid).val() >= 60000)",
+          "uid": {
+            ".validate": "newData.isString() && newData.val() === auth.uid"
+          },
+          "name": {
+            ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 24"
+          },
+          "author": {
+            ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 16 && newData.val().matches(/^[A-Za-z0-9 _.-]+$/)"
+          },
+          "code": {
+            ".validate": "newData.isString() && newData.val().length <= 20000 && (newData.val().beginsWith('SKY1.') || newData.val().beginsWith('SKY0.'))"
+          },
+          "blocks": {
+            ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 500"
+          },
+          "at": {
+            ".validate": "newData.isNumber()"
+          },
+          "$other": {
+            ".validate": false
+          }
+        }
+      },
+      "levelVotes": {
+        ".read": true,
+        "$id": {
+          "$uid": {
+            ".write": "auth != null && auth.uid === $uid",
+            ".validate": "newData.val() === true && root.child('skyhook').child('levels').child($id).exists()"
+          }
+        }
+      },
+      "publishers": {
+        "$uid": {
+          ".read": "auth != null && auth.uid === $uid",
+          ".write": "auth != null && auth.uid === $uid",
+          ".validate": "newData.val() === now"
+        }
       }
     }
   }

@@ -134,3 +134,62 @@ export async function getLeaderboard(levelId, count = 10) {
   }
   return { rows, me };
 }
+
+// --- Community levels -----------------------------------------------------------
+// skyhook/levels/<id> = { uid, name, author, code, blocks, at }
+// skyhook/levelVotes/<id>/<uid> = true
+// skyhook/publishers/<uid> = time of your last publish (rules allow one a minute)
+
+function newId() {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  let id = '';
+  for (let i = 0; i < 12; i++) id += chars[Math.floor(Math.random() * chars.length)];
+  return id;
+}
+
+// Publish (or update, if id is given and it's yours). Returns the level id.
+export async function publishLevel({ id = null, name, author, code, blocks }) {
+  const f = await connect();
+  const levelId = id || newId();
+  await withTimeout(f.update(f.ref(f.db, 'skyhook'), {
+    [`levels/${levelId}`]: {
+      uid: f.uid, name: String(name).slice(0, 24) || 'Untitled', author: cleanName(author), code, blocks, at: f.serverTimestamp(),
+    },
+    [`publishers/${f.uid}`]: f.serverTimestamp(),
+  }), 'Publishing');
+  return levelId;
+}
+
+export async function unpublishLevel(id) {
+  const f = await connect();
+  await withTimeout(f.remove(f.ref(f.db, `skyhook/levels/${id}`)), 'Removing');
+}
+
+// The newest published levels with vote counts. Returns
+// [{ id, name, author, code, blocks, at, votes, voted, mine }], newest first.
+export async function listLevels(count = 40) {
+  const f = await connect();
+  const snap = await withTimeout(
+    f.get(f.query(f.ref(f.db, 'skyhook/levels'), f.orderByChild('at'), f.limitToLast(count))),
+    'Loading community levels'
+  );
+  const levels = [];
+  snap.forEach((c) => { levels.push({ id: c.key, ...c.val() }); });
+  await Promise.all(levels.map(async (l) => {
+    const v = await withTimeout(f.get(f.ref(f.db, `skyhook/levelVotes/${l.id}`)), 'Loading votes');
+    l.votes = v.exists() ? v.size : 0;
+    l.voted = v.child(f.uid).exists();
+    l.mine = l.uid === f.uid;
+  }));
+  return levels.sort((a, b) => b.at - a.at);
+}
+
+export async function voteLevel(id, on) {
+  const f = await connect();
+  const r = f.ref(f.db, `skyhook/levelVotes/${id}/${f.uid}`);
+  await withTimeout(on ? f.set(r, true) : f.remove(r), 'Voting');
+}
+
+export async function myUid() {
+  return (await connect()).uid;
+}

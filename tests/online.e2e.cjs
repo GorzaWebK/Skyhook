@@ -48,6 +48,20 @@ async function rulesTests() {
   check(!(await ok(db.set(db.ref(B.d, `skyhook/scores/level-99/${B.uid}`), entry('Bob', 20)))), 'rules: only real level names (level-1 to level-30)');
   check(!(await ok(db.get(db.ref(B.d, 'skyhook')))), 'rules: the whole database cannot be read in one go');
   check(await ok(db.set(refB, entry('Bob', 20))), 'rules: a valid entry on another level is fine');
+  // Community levels.
+  const lvl = (uid, name = 'Test Level', code = 'SKY1.abc') => ({ uid, name, author: 'Tester', code, blocks: 5, at: db.serverTimestamp() });
+  const publish = (c, id, data) => db.update(db.ref(c.d, 'skyhook'), { [`levels/${id}`]: data, [`publishers/${c.uid}`]: db.serverTimestamp() });
+  check(await ok(publish(A, 'AAAAAAAAAAAA', lvl(A.uid))), 'rules: a player can publish a level');
+  check(!(await ok(publish(A, 'AAAAAAAAAAAB', lvl(A.uid)))), 'rules: publishing again within a minute is refused (anti-spam)');
+  check(!(await ok(db.set(db.ref(A.d, 'skyhook/levels/AAAAAAAAAAAC'), lvl(A.uid)))), 'rules: publishing must go through the once-a-minute check');
+  check(!(await ok(publish(B, 'AAAAAAAAAAAA', lvl(B.uid, 'Hijack')))), "rules: you cannot overwrite someone else's level");
+  check(!(await ok(publish(B, 'BBBBBBBBBBBB', lvl(A.uid)))), 'rules: you cannot publish under someone else\'s name');
+  check(!(await ok(publish(B, 'BBBBBBBBBBBB', lvl(B.uid, 'Bad', 'javascript:alert(1)')))), 'rules: a published level must be a Skyhook level code');
+  check(await ok(db.set(db.ref(B.d, 'skyhook/levelVotes/AAAAAAAAAAAA/' + B.uid), true)), 'rules: players can upvote a level');
+  check(!(await ok(db.set(db.ref(B.d, 'skyhook/levelVotes/ZZZZZZZZZZZZ/' + B.uid), true))), 'rules: you cannot vote for a level that does not exist');
+  check(!(await ok(db.set(db.ref(B.d, 'skyhook/levelVotes/AAAAAAAAAAAA/' + A.uid), true))), 'rules: you cannot vote as someone else');
+  check(!(await ok(db.remove(db.ref(B.d, 'skyhook/levels/AAAAAAAAAAAA')))), "rules: you cannot remove someone else's level");
+  check(await ok(db.remove(db.ref(A.d, 'skyhook/levels/AAAAAAAAAAAA'))), 'rules: you can remove your own level');
   // Ghosts must be uploaded together with a matching score.
   const both = (d, uid, board, time, data = 'G1.abc') => db.update(db.ref(d, 'skyhook'), {
     [`scores/${board}/${uid}`]: entry('Ghosty', time),
@@ -151,6 +165,55 @@ async function browserTests() {
     await p2.press('#board-name', 'Tab');
     check((await p2.inputValue('#board-name')) === 'Rivalscript', 'player names are cleaned');
     await p2.screenshot({ path: 'test-results/online-board.png' });
+
+    // Community levels: player 1 publishes, player 2 finds, votes and plays it.
+    const level = {
+      id: 'c-test', own: true, tested: true,
+      data: { v: 1, name: 'Sky Steps', theme: 'sunset', blocks: [
+        ['a', 0, 20, -26, 6, 6, 6], ['a', 0, 22, -54, 6, 6, 6], ['a', 0, 24, -82, 6, 6, 6],
+        ['c', 0, 6.25, -104, 11, 1.5, 11], ['f', 0, 7, -150, 18, 2, 18],
+      ] },
+    };
+    await p1.evaluate((l) => localStorage.setItem('skyhook.custom', JSON.stringify([l])), level);
+    await p1.goto(`${URL}?emulator=1`);
+    await p1.waitForTimeout(800);
+    await p1.click('#editor-btn');
+    await p1.click('.ml-row [data-act="publish"]');
+    let pubMsg = '';
+    for (let i = 0; i < 40 && !pubMsg.includes('published'); i++) { await p1.waitForTimeout(250); pubMsg = await p1.textContent('#ml-msg'); }
+    check(pubMsg.includes('is published'), `My Levels: Publish puts the level online ("${pubMsg}")`);
+    check((await p1.textContent('.ml-row [data-act="publish"]')) === 'Update online', 'a published level offers Update online');
+
+    await p2.goto(`${URL}?emulator=1`);
+    await p2.waitForTimeout(800);
+    check(await p2.isVisible('#community-btn'), 'Community levels button shows when online');
+    await p2.click('#community-btn');
+    let clist = '';
+    for (let i = 0; i < 40 && !clist.includes('Sky Steps'); i++) { await p2.waitForTimeout(250); clist = await p2.textContent('#community-list'); }
+    check(clist.includes('Sky Steps') && clist.includes('by SkyAce'), 'another player sees the published level with its author');
+    await p2.click('.ml-row [data-act="vote"]');
+    await p2.waitForTimeout(800);
+    await p2.click('#tab-top');
+    check((await p2.textContent('.ml-row [data-act="vote"]')).includes('1') && await p2.isVisible('.btn.vote.on'), 'upvoting counts the vote');
+    await p2.click('.ml-row [data-act="play"]');
+    await p2.waitForTimeout(1000);
+    const cs = await p2.evaluate(() => ({ mode: window.__skyhook.mode, community: window.__skyhook.level.community, theme: window.__skyhook.renderer.themeId }));
+    check(cs.mode === 'custom' && cs.community && cs.theme === 'sunset', 'a community level can be played (with its sky)');
+    await p2.evaluate(() => window.__skyhook.run.player.pos.copy(window.__skyhook.course.finish.trigger.center));
+    await p2.waitForTimeout(600);
+    check((await p2.textContent('#finish-title')).includes('Sky Steps') && !(await p2.evaluate(() => (JSON.parse(localStorage.getItem('skyhook.custom') || '[]')).length)), 'finishing it works and does not add it to your own levels');
+    await p2.screenshot({ path: 'test-results/community-finish.png' });
+
+    // Owner removes it.
+    await p1.click('#screen-mylevels [data-back]');
+    await p1.click('#community-btn');
+    for (let i = 0; i < 40 && !(await p1.isVisible('.ml-row [data-act="remove"]')); i++) await p1.waitForTimeout(250);
+    await p1.screenshot({ path: 'test-results/community.png' });
+    await p1.click('.ml-row [data-act="remove"]');
+    await p1.click('.ml-row [data-act="remove"]');
+    let gone = false;
+    for (let i = 0; i < 40 && !gone; i++) { await p1.waitForTimeout(250); gone = (await p1.textContent('#community-msg')).includes('No levels published'); }
+    check(gone, 'the owner can remove their published level');
 
     // Switched off (as in the automated tests): no Leaderboards button.
     const p3 = await (await browser.newContext()).newPage();

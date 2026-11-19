@@ -38,6 +38,7 @@ async function waitForServer() {
     await page.goto(URL);
     await page.waitForTimeout(1500);
     check(await page.isVisible('#menu'), 'title menu is shown');
+    check(!(await page.isVisible('#community-btn')) && !(await page.isVisible('#boards-btn')), 'online-only buttons are hidden when offline');
     check(!(await page.isVisible('#screen-controls')), 'controls are hidden until the Controls button is pressed');
     await page.click('#controls-btn');
     check(await page.isVisible('#screen-controls') && !(await page.isVisible('#screen-main')), 'Controls button opens the controls page');

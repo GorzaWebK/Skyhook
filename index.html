@@ -214,6 +214,10 @@
       .btn.daily { display: flex; flex-direction: column; align-items: center; gap: 2px; border-color: rgba(255, 211, 107, 0.6); background: rgba(255, 211, 107, 0.12); }
       .btn.daily b { color: var(--gold); letter-spacing: 1px; }
       .btn.daily span { font-size: 12px; font-weight: 500; color: var(--muted); }
+      .tabs .btn.on { border-color: var(--accent); background: rgba(255,138,61,0.18); }
+      .btn.vote.on { border-color: #7dff9a; color: #7dff9a; }
+      #ml-msg { margin-top: 8px; min-height: 18px; }
+      #community-list { margin: 10px 0 4px; display: flex; flex-direction: column; gap: 8px; }
       .footer { margin-top: 16px; font-size: 12px; color: var(--muted); }
       .hud-right { position: absolute; top: 18px; right: 22px; text-align: right; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.45); }
       #level-label { font-size: 15px; font-weight: 700; }
@@ -292,6 +296,7 @@
         <div class="btn-row">
           <button class="btn" id="skins-btn">Gun</button>
           <button class="btn" id="editor-btn">Level editor</button>
+          <button class="btn" id="community-btn">Community levels</button>
         </div>
         <div class="btn-row">
           <button class="btn" id="settings-btn">Settings</button>
@@ -361,12 +366,24 @@
         <button class="btn" data-back>Back</button>
       </div>
 
+      <div id="screen-community" class="card screen wide hidden">
+        <div class="levels-head"><h2>Community levels</h2><span class="muted-note">Levels built and published by players.</span></div>
+        <div class="btn-row tabs">
+          <button class="btn on" id="tab-new">Newest</button>
+          <button class="btn" id="tab-top">Top voted</button>
+        </div>
+        <div id="community-msg" class="msg"></div>
+        <div id="community-list"></div>
+        <button class="btn" data-back>Back</button>
+      </div>
+
       <div id="screen-mylevels" class="card screen wide hidden">
         <div class="levels-head"><h2>My Levels</h2><span class="muted-note">Build your own courses and share them with a code.</span></div>
         <div class="btn-row">
           <button class="btn primary" id="ml-new">+ New level</button>
           <button class="btn" id="ml-import-toggle">Import a code</button>
         </div>
+        <div id="ml-msg" class="msg"></div>
         <div id="ml-import" class="panel hidden">
           <textarea id="import-code" rows="3" placeholder="Paste a level code (starts with SKY1.)"></textarea>
           <div class="row"><button class="btn small" id="import-btn">Import</button><span id="import-msg" class="msg"></span></div>

@@ -1,7 +1,7 @@
 import { isHookable, insideBox, buildTutorialCourse, buildCustomCourse } from './course.js';
 import { Editor, TOOLS } from './editor.js';
 import { encodeLevel, decodeLevel, newLevelId } from './custom.js';
-import { onlineEnabled, submitScore, getLeaderboard, getRecordGhost, cleanName } from './online.js';
+import { onlineEnabled, submitScore, getLeaderboard, getRecordGhost, cleanName, publishLevel, unpublishLevel, listLevels, voteLevel } from './online.js';
 import { GhostRecorder, encodeGhost, decodeGhost } from './ghost.js';
 import { THEMES } from './themes.js';
 import { dailyFor, buildDaily, timeUntilNext, dailyStreak, dateKey } from './daily.js';
@@ -29,7 +29,9 @@ const ui = {
   menu: $('menu'), screens: document.querySelectorAll('.screen'),
   playBtn: $('play-btn'), restartBtn: $('restart-btn'), levelsBtn: $('levels-btn'), controlsBtn: $('controls-btn'),
   tutorialBtn: $('tutorial-btn'), newHint: $('new-hint'), editorBtn: $('editor-btn'),
-  dailyBtn: $('daily-btn'), dailyInfo: $('daily-info'),
+  dailyBtn: $('daily-btn'), dailyInfo: $('daily-info'), mlMsg: $('ml-msg'),
+  communityBtn: $('community-btn'), communityList: $('community-list'), communityMsg: $('community-msg'),
+  tabNew: $('tab-new'), tabTop: $('tab-top'),
   mlNew: $('ml-new'), mlImportToggle: $('ml-import-toggle'), mlImport: $('ml-import'), importCode: $('import-code'),
   importBtn: $('import-btn'), importMsg: $('import-msg'), mlList: $('ml-list'),
   mlShare: $('ml-share'), mlShareTitle: $('ml-share-title'), mlShareCode: $('ml-share-code'), mlShareMsg: $('ml-share-msg'),
@@ -243,7 +245,7 @@ function isUnlocked(index) {
 
 function levelTitle(l) {
   if (l.daily) return `Daily challenge #${l.number} (${l.date})`;
-  if (l.custom) return `${mode === 'test' ? 'Testing' : 'Custom'}: ${l.name}`;
+  if (l.custom) return `${mode === 'test' ? 'Testing' : l.community ? 'Community' : 'Custom'}: ${l.name}`;
   return l.tutorial ? 'Tutorial' : `Level ${l.number}: ${l.name}`;
 }
 
@@ -286,10 +288,11 @@ function loadLevel(index) {
 const editor = new Editor(renderer);
 
 function customDef(lvl) {
-  return { id: `custom-${lvl.id}`, custom: true, data: lvl.data, name: lvl.data.name, index: -1, number: 0 };
+  return { id: `custom-${lvl.id}`, custom: true, community: !!lvl.community, data: lvl.data, name: lvl.data.name, index: -1, number: 0 };
 }
 
 function saveCustom(lvl) {
+  if (lvl.community) return; // community levels you play aren't added to My Levels
   const list = storage.getCustomLevels().filter((l) => l.id !== lvl.id);
   list.unshift(lvl);
   storage.setCustomLevels(list);
@@ -411,12 +414,14 @@ function buildMyLevels() {
       <button class="btn" data-act="play" ${sum.hasFinish ? '' : 'disabled title="Add a finish first"'}>Play</button>
       <button class="btn" data-act="edit">Edit</button>
       <button class="btn" data-act="share">Share</button>
+      ${onlineEnabled && lvl.own ? `<button class="btn" data-act="publish" ${lvl.tested && sum.hasFinish ? '' : 'disabled title="Finish it once yourself first"'}>${lvl.publishedId ? 'Update online' : 'Publish'}</button>` : ''}
       <button class="btn" data-act="delete">Delete</button>`;
     row.querySelector('.ml-name').textContent = lvl.data.name; // user text: never as HTML
     row.addEventListener('click', (e) => {
       const act = e.target.dataset?.act;
       if (act === 'play') playCustom(lvl);
       if (act === 'edit') openEditor(lvl);
+      if (act === 'publish') publishCustom(lvl);
       if (act === 'share') {
         ui.mlShareTitle.textContent = `Share code: ${lvl.data.name}`;
         showShareCode(lvl, ui.mlShare, ui.mlShareCode, ui.mlShareMsg);
@@ -432,6 +437,97 @@ function buildMyLevels() {
       }
     });
     ui.mlList.appendChild(row);
+  }
+}
+
+// --- Community levels --------------------------------------------------------
+
+let communityLevels = [];
+let communitySort = 'new';
+
+function friendlyError(e) {
+  return /permission/i.test(e.message) ? "Couldn't publish. You can publish once a minute, so try again shortly." : e.message;
+}
+
+async function publishCustom(lvl) {
+  ui.mlMsg.className = 'msg';
+  ui.mlMsg.textContent = `Publishing "${lvl.data.name}"...`;
+  try {
+    const code = await encodeLevel(lvl.data);
+    lvl.publishedId = await publishLevel({
+      id: lvl.publishedId, name: lvl.data.name, author: settings.playerName, code, blocks: lvl.data.blocks.length,
+    });
+    saveCustom(lvl);
+    ui.mlMsg.className = 'msg good';
+    ui.mlMsg.textContent = `"${lvl.data.name}" is published! Find it under Community levels.`;
+    buildMyLevels();
+  } catch (e) {
+    ui.mlMsg.className = 'msg err';
+    ui.mlMsg.textContent = friendlyError(e);
+  }
+}
+
+async function loadCommunity() {
+  ui.communityMsg.textContent = 'Loading...';
+  ui.communityList.innerHTML = '';
+  try {
+    communityLevels = await listLevels(40);
+    ui.communityMsg.textContent = communityLevels.length ? '' : 'No levels published yet. Build one in the Level editor and publish it!';
+    renderCommunity();
+  } catch (e) {
+    ui.communityMsg.textContent = `Couldn't load community levels (${e.message}).`;
+  }
+}
+
+function renderCommunity() {
+  ui.tabNew.classList.toggle('on', communitySort === 'new');
+  ui.tabTop.classList.toggle('on', communitySort === 'top');
+  const list = [...communityLevels].sort(communitySort === 'top' ? (a, b) => b.votes - a.votes || b.at - a.at : (a, b) => b.at - a.at);
+  ui.communityList.innerHTML = '';
+  for (const l of list) {
+    const row = document.createElement('div');
+    row.className = 'ml-row';
+    row.dataset.id = l.id;
+    const best = storage.getBest(`custom-community-${l.id}`);
+    row.innerHTML = `
+      <div class="ml-info"><div class="ml-name"></div><div class="ml-meta"></div></div>
+      <button class="btn vote${l.voted ? ' on' : ''}" data-act="vote" ${l.mine ? 'disabled title="Your level"' : ''}>▲ ${l.votes}</button>
+      <button class="btn" data-act="play">Play</button>
+      ${l.mine ? '<button class="btn" data-act="remove">Remove</button>' : ''}`;
+    row.querySelector('.ml-name').textContent = l.name; // user text: never as HTML
+    row.querySelector('.ml-meta').textContent = `by ${l.author}${l.mine ? ' (you)' : ''} · ${l.blocks} blocks${best ? ` · your best ${formatTime(best.time)}` : ''}`;
+    row.addEventListener('click', async (e) => {
+      const act = e.target.dataset?.act;
+      try {
+        if (act === 'play') {
+          const data = await decodeLevel(l.code);
+          playCustom({ id: `community-${l.id}`, community: true, communityId: l.id, own: l.mine, voted: l.voted, tested: false, data });
+        }
+        if (act === 'vote') {
+          l.voted = !l.voted;
+          l.votes += l.voted ? 1 : -1;
+          renderCommunity();
+          await voteLevel(l.id, l.voted);
+        }
+        if (act === 'remove') {
+          if (!e.target.dataset.confirm) {
+            e.target.dataset.confirm = '1';
+            e.target.textContent = 'Sure?';
+            return;
+          }
+          await unpublishLevel(l.id);
+          const mine = storage.getCustomLevels().find((m) => m.publishedId === l.id);
+          if (mine) {
+            delete mine.publishedId;
+            saveCustom(mine);
+          }
+          loadCommunity();
+        }
+      } catch (err) {
+        ui.communityMsg.textContent = err.message;
+      }
+    });
+    ui.communityList.appendChild(row);
   }
 }
 
@@ -608,7 +704,9 @@ function showScreen(name) {
     ui.boardName.value = settings.playerName;
     showBoard();
   }
+  if (name === 'community') loadCommunity();
   if (name === 'mylevels') {
+    ui.mlMsg.textContent = '';
     buildMyLevels();
     ui.mlShare.classList.add('hidden');
   }
@@ -724,7 +822,9 @@ function finishCustom(e) {
   ui.finishMedal.innerHTML = announceNewSkins(skinsBefore);
   ui.finishHint.innerHTML = mode === 'test'
     ? '<kbd>T</kbd> back to editor · <kbd>R</kbd> fly again · <kbd>Esc</kbd> menu'
-    : '<kbd>R</kbd> fly again · <kbd>Esc</kbd> menu';
+    : customLevel.community && !customLevel.own
+      ? 'Liked it? <kbd>V</kbd> upvote · <kbd>R</kbd> fly again · <kbd>Esc</kbd> menu'
+      : '<kbd>R</kbd> fly again · <kbd>Esc</kbd> menu';
   state = 'finished';
   ui.finish.classList.remove('hidden');
 }
@@ -888,6 +988,10 @@ input.handlers.key = (code) => {
     state = 'playing';
   }
   if (code === 'KeyM') toggleMute();
+  if (code === 'KeyV' && state === 'finished' && customLevel?.community && !customLevel.own && !customLevel.voted) {
+    customLevel.voted = true;
+    voteLevel(customLevel.communityId, true).then(() => showToast('Upvoted!', '#7dff9a')).catch(() => showToast("Couldn't vote", '#ff9a9a'));
+  }
   if (code === 'KeyC' && state === 'playing' && run.started && !run.finished) backToCheckpoint();
 };
 function toggleMute() {
@@ -948,6 +1052,10 @@ ui.skinsBtn.addEventListener('click', () => showScreen('skins'));
 ui.editorBtn.addEventListener('click', () => showScreen('mylevels'));
 ui.dailyBtn.addEventListener('click', playDaily);
 ui.boardsBtn.classList.toggle('hidden', !onlineEnabled);
+ui.communityBtn.classList.toggle('hidden', !onlineEnabled);
+ui.communityBtn.addEventListener('click', () => showScreen('community'));
+ui.tabNew.addEventListener('click', () => { communitySort = 'new'; renderCommunity(); });
+ui.tabTop.addEventListener('click', () => { communitySort = 'top'; renderCommunity(); });
 ui.boardsBtn.addEventListener('click', () => showScreen('boards'));
 ui.boardPrev.addEventListener('click', () => {
   boardIndex = boardIndex <= -1 ? LEVELS.length - 1 : boardIndex - 1; // wraps through the daily (-1)
@@ -1151,6 +1259,7 @@ window.__skyhook = {
   renderer, restart, loadLevel, loadTutorial, playDaily, dailyFor, formatTime, TUNING, medalCounts,
   get skin() { return settings.skin; },
   get mode() { return mode; },
+  get communityLevels() { return communityLevels; },
   get customLevel() { return customLevel; },
   editor, openEditor, newCustomLevel, startTest, backToEditor, encodeLevel, decodeLevel,
   online: { submitScore, getLeaderboard },
