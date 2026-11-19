@@ -218,6 +218,8 @@
       .btn.vote.on { border-color: #7dff9a; color: #7dff9a; }
       #ml-msg { margin-top: 8px; min-height: 18px; }
       #community-list { margin: 10px 0 4px; display: flex; flex-direction: column; gap: 8px; }
+      #fps { position: fixed; left: 10px; bottom: 8px; z-index: 5; font: 12px ui-monospace, Consolas, monospace; color: #e6eefa; text-shadow: 0 1px 3px rgba(0,0,0,0.6); pointer-events: none; }
+      #phone-notice { z-index: 50; background: #0f1a2b; }
       .footer { margin-top: 16px; font-size: 12px; color: var(--muted); }
       .hud-right { position: absolute; top: 18px; right: 22px; text-align: right; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.45); }
       #level-label { font-size: 15px; font-weight: 700; }
@@ -253,6 +255,15 @@
   </head>
   <body>
     <canvas id="game"></canvas>
+    <div id="fps" class="hidden"></div>
+    <div id="phone-notice" class="overlay hidden">
+      <div class="card" style="text-align:center">
+        <h1 style="font-size:44px">SKY<span>HOOK</span></h1>
+        <h2 style="margin-top:16px">Play on a PC</h2>
+        <p class="sub">Skyhook needs a keyboard and mouse to aim the grappling hook, so it can't be played on a phone or tablet. Open this page on a computer to play.</p>
+        <button class="btn" id="phone-continue">I have a mouse and keyboard, continue anyway</button>
+      </div>
+    </div>
 
     <div id="hud" class="hidden">
       <div class="timer-box">
@@ -317,6 +328,12 @@
           <span>Mute everything <kbd>M</kbd></span><span><input id="mute" type="checkbox" /></span>
           <span>Camera shake</span><span><input id="shake" type="checkbox" /></span>
           <span>Speed effects</span><span><input id="speedfx" type="checkbox" /></span>
+          <span>Graphics quality</span><span><select id="quality">
+            <option value="high">High</option>
+            <option value="medium">Medium</option>
+            <option value="low">Low (for slower PCs)</option>
+          </select></span>
+          <span>Show frames per second</span><span><input id="show-fps" type="checkbox" /></span>
           <span>Ghost</span><span><select id="ghost-mode">
             <option value="off">Off</option>
             <option value="best">Your best</option>

@@ -187,6 +187,20 @@ export class Renderer {
     if (this.speedLines) this.speedLines.material.uniforms.aspect.value = w / h;
   }
 
+  // Graphics quality: 'high' | 'medium' | 'low'.
+  setQuality(q) {
+    this.quality = ['high', 'medium', 'low'].includes(q) ? q : 'high';
+    const dpr = window.devicePixelRatio || 1;
+    const ratio = { high: Math.min(dpr, 2), medium: 1, low: 0.7 }[this.quality];
+    this.renderer.setPixelRatio(ratio);
+    this.resize();
+    // Low: one cloud layer, less rain, shorter draw distance.
+    this.cloudLayers[1].mesh.visible = this.quality !== 'low';
+    this.rain.mesh.geometry.setDrawRange(0, this.rain.mesh.geometry.attributes.position.count * (this.quality === 'high' ? 1 : this.quality === 'medium' ? 0.6 : 0.3));
+    this.camera.far = this.quality === 'low' ? 1600 : 3000;
+    this.camera.updateProjectionMatrix();
+  }
+
   setTheme(id) {
     const t = THEMES[id] || THEMES.day;
     this.themeId = THEMES[id] ? id : 'day';

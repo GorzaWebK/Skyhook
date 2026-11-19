@@ -4,7 +4,7 @@ A first-person grappling hook game for the browser. Fire your hook at the orange
 
 **Play:** https://gorzawebk.github.io/Skyhook/
 
-PC only (keyboard and mouse). Everything is made in code: the 3D world, textures, sky, clouds and all sound effects. There are no image or audio files.
+PC only (keyboard and mouse). Phones and tablets with only a touchscreen see a short "play on a PC" notice. Everything is made in code: the 3D world, textures, sky, clouds and all sound effects. There are no image or audio files.
 
 > "Skyhook" is a working title. (Repo: GorzaWebK/Skyhook, formerly New-game.)
 
@@ -65,7 +65,7 @@ The full controls list sits behind the **Controls** button on the main menu.
 - **Sky themes:** Levels 1–10 are set in daytime, 11–20 at sunset and 21–30 at night (with stars and a moon). A fourth theme, **Storm**, has dark clouds, rain, lightning and thunder. You can pick any of the four for your own levels in the editor.
 - **Speed effects:** Thin speed lines and darker screen edges fade in when you fly fast (they can be switched off in Settings). Sparks fly where the hook bites.
 - **Feel:** The view widens with speed, the camera shakes on hard landings and when the hook catches, and wind and rope-creak sounds follow your speed.
-- **Settings page:** mouse sensitivity, invert mouse, field of view, separate sound effects and music volumes, mute, camera shake on/off and speed effects on/off. All are saved.
+- **Settings page:** graphics quality (High, Medium, Low), a frames-per-second counter, mouse sensitivity, invert mouse, field of view, separate sound effects and music volumes, mute, camera shake on/off and speed effects on/off. All are saved.
 
 ## How it's built
 

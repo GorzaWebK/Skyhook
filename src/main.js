@@ -47,6 +47,7 @@ const ui = {
   sens: $('sens'), sensVal: $('sens-val'), mute: $('mute'), musicVol: $('music-vol'), musicVal: $('music-val'),
   invert: $('invert'), fov: $('fov'), fovVal: $('fov-val'), sfxVol: $('sfx-vol'), sfxVal: $('sfx-val'),
   shake: $('shake'), speedfx: $('speedfx'), settingsBtn: $('settings-btn'), ghostMode: $('ghost-mode'),
+  quality: $('quality'), showFps: $('show-fps'), fps: $('fps'), phoneNotice: $('phone-notice'), phoneContinue: $('phone-continue'),
   finish: $('finish'), finishTitle: $('finish-title'), finishTime: $('finish-time'),
   finishNote: $('finish-note'), finishHint: $('finish-hint'), finishMedal: $('finish-medal'),
   medalTotals: $('medal-totals'),
@@ -92,6 +93,7 @@ const settings = storage.getSettings();
 // Defaults for settings added later (older saves don't have them).
 Object.assign(settings, {
   invertY: false, fov: 85, sfxVolume: 1, musicVolume: 0.6, shake: true, speedFx: true, ghost: 'best',
+  quality: 'high', showFps: false,
   ...settings,
 });
 const sound = new Sound(settings.muted);
@@ -1161,6 +1163,20 @@ renderer.baseFov = settings.fov;
 renderer.shakeEnabled = settings.shake;
 renderer.speedFx = settings.speedFx;
 ui.settingsBtn.addEventListener('click', () => showScreen('settings'));
+ui.quality.value = settings.quality;
+renderer.setQuality(settings.quality);
+ui.quality.addEventListener('change', () => {
+  settings.quality = ui.quality.value;
+  renderer.setQuality(settings.quality);
+  storage.setSettings(settings);
+});
+bindCheck(ui.showFps, 'showFps', (v) => ui.fps.classList.toggle('hidden', !v));
+ui.fps.classList.toggle('hidden', !settings.showFps);
+
+// Phones and tablets with only a touchscreen can't play (no mouse to aim).
+const touchOnly = window.matchMedia?.('(pointer: coarse)').matches && !window.matchMedia('(any-pointer: fine)').matches;
+if (touchOnly && !params.has('bot')) ui.phoneNotice.classList.remove('hidden');
+ui.phoneContinue.addEventListener('click', () => ui.phoneNotice.classList.add('hidden'));
 ui.ghostMode.value = settings.ghost;
 ui.ghostMode.addEventListener('change', () => {
   settings.ghost = ui.ghostMode.value;
@@ -1181,10 +1197,20 @@ showScreen('main');
 
 let last = performance.now();
 let accumulator = 0;
+let fpsFrames = 0;
+let fpsTime = 0;
 
 function frame(now) {
-  const dt = Math.min(0.1, (now - last) / 1000);
+  const realDt = (now - last) / 1000;
+  const dt = Math.min(0.1, realDt);
   last = now;
+  fpsFrames++;
+  fpsTime += realDt;
+  if (fpsTime >= 0.5) {
+    if (settings.showFps) ui.fps.textContent = `${Math.round(fpsFrames / fpsTime)} fps`;
+    fpsFrames = 0;
+    fpsTime = 0;
+  }
   const p = run.player;
 
   let mx = 0;

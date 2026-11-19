@@ -178,6 +178,19 @@ async function waitForServer() {
     await g(() => document.dispatchEvent(new MouseEvent('mousemove', { movementX: 0, movementY: -60 })));
     await page.waitForTimeout(400);
     check(await g((p0) => window.__skyhook.run.player.pitch < p0 - 0.05, pitch0), 'invert mouse flips looking up and down');
+    // Graphics quality and fps counter.
+    await g(() => document.exitPointerLock());
+    await page.waitForTimeout(300);
+    await page.click('#settings-btn');
+    await page.selectOption('#quality', 'low');
+    check(await g(() => window.__skyhook.renderer.quality === 'low' && window.__skyhook.renderer.renderer.getPixelRatio() === 0.7 && !window.__skyhook.renderer.cloudLayers[1].mesh.visible), 'Low graphics quality lowers resolution and effects');
+    await page.selectOption('#quality', 'high');
+    await page.check('#show-fps');
+    await page.waitForTimeout(800);
+    check(await page.isVisible('#fps') && /\d+ fps/.test(await page.textContent('#fps')), `frames-per-second counter can be shown (${await page.textContent('#fps')})`);
+    await page.uncheck('#show-fps');
+    await page.click('#screen-settings [data-back]');
+    check(!(await page.isVisible('#phone-notice')), 'no phone notice on a desktop');
     await g(() => { const st = JSON.parse(localStorage.getItem('skyhook.settings')); Object.assign(st, { fov: 85, invertY: false, sfxVolume: 1, shake: true }); localStorage.setItem('skyhook.settings', JSON.stringify(st)); });
     await page.keyboard.press('KeyM');
 
@@ -521,6 +534,19 @@ async function waitForServer() {
     check(await g(() => !window.__skyhook.run.player.pending && !window.__skyhook.run.player.hook && window.__skyhook.renderer.viewModel.claw.visible),
       'letting go before it lands cancels the shot and reloads the claw');
     await g(() => { window.__skyhook.TUNING.hookSpeed = 250; });
+
+    // Phones: a 'play on a PC' notice.
+    const { devices } = require('playwright');
+    const phone = await browser.newContext({ ...devices['iPhone 13'] });
+    const pp = await phone.newPage();
+    await pp.addInitScript(() => { window.__SKYHOOK_OFFLINE = true; });
+    await pp.goto(URL);
+    await pp.waitForTimeout(1200);
+    check(await pp.isVisible('#phone-notice') && (await pp.textContent('#phone-notice')).includes('Play on a PC'), 'phones see a "play on a PC" notice');
+    await pp.screenshot({ path: 'test-results/phone.png' });
+    await pp.click('#phone-continue');
+    check(!(await pp.isVisible('#phone-notice')), 'the phone notice can be dismissed');
+    await phone.close();
 
     check(errors.length === 0, `no console errors${errors.length ? `: ${errors.join(' | ')}` : ''}`);
   } finally {
