@@ -40,6 +40,7 @@ The full controls list sits behind the **Controls** button on the main menu.
   - checkpoints further apart
   - from level 13, dark **smooth blocks** that your hook can't grab. They sit in your swing path and can block your aim.
 - **Medals:** Every level has gold, silver and bronze target times. Gold is the autopilot's own time, silver is 30% slower and bronze 75% slower. The HUD shows the next medal to aim for, the finish screen shows what you earned, and the level select shows your medal on each level plus your totals.
+- **Gun skins:** Nine colour styles for the grapple gun, picked from **Gun** on the main menu. The live gun stays visible next to the list, so you see the change straight away. They unlock with progress: Standard (free), Rookie Teal (finish the tutorial), Bronze Age (5 medals), Crimson (15 medals), Cobalt (5 silver-or-better), Toxic (15 silver-or-better), Architect (finish a level you built in the editor), Gilded (10 golds) and Phantom Chrome (gold on all 30 levels). The finish screen tells you when you've unlocked a new one.
 - **Proven finishable:** Every level is checked by the autopilot (see below) to make sure it can be finished without falling.
 - **Checkpoints and finish:** Tall columns of light. Flying through them anywhere counts.
 - **Timer and best times:** The clock starts when you leave the start platform. Your best time and checkpoint splits for each level, and which levels you've unlocked, are saved in the browser.
@@ -66,6 +67,7 @@ The full controls list sits behind the **Controls** button on the main menu.
 | `src/run.js` | Timer, checkpoints, finish, respawn |
 | `src/course.js` | Level generator and difficulty settings |
 | `src/levels.js` | The 30 levels: names and seeds |
+| `src/skins.js` | Gun skins and their unlock rules |
 | `src/tutorial.js` | Tutorial steps and when each one is ticked off |
 | `src/render.js` | three.js scene, sky, clouds, hook head |
 | `src/viewmodel.js` | First-person arm and grapple gun |

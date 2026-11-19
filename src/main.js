@@ -8,6 +8,8 @@ import { Renderer } from './render.js';
 import { Sound } from './audio.js';
 import { Input } from './input.js';
 import { storage } from './storage.js';
+import { SKINS, getSkin, isSkinUnlocked, skinRequirement } from './skins.js';
+import { applySkin } from './viewmodel.js';
 
 const params = new URLSearchParams(location.search);
 const botMode = params.has('bot');
@@ -19,7 +21,7 @@ const ui = {
   cp: $('cp'), levelLabel: $('level-label'), crosshair: $('crosshair'), toast: $('toast'),
   menu: $('menu'), screens: document.querySelectorAll('.screen'),
   playBtn: $('play-btn'), restartBtn: $('restart-btn'), levelsBtn: $('levels-btn'), controlsBtn: $('controls-btn'),
-  tutorialBtn: $('tutorial-btn'), newHint: $('new-hint'),
+  tutorialBtn: $('tutorial-btn'), newHint: $('new-hint'), skinsBtn: $('skins-btn'), skinGrid: $('skin-grid'),
   tutorial: $('tutorial'), tutStep: $('tut-step'), tutText: $('tut-text'),
   courseName: $('course-name'), menuBest: $('menu-best'),
   levelGrid: $('level-grid'), levelProgress: $('level-progress'),
@@ -54,12 +56,63 @@ export function medalCounts() {
   return c;
 }
 
+function skinStats() {
+  return { medals: medalCounts(), tutorialDone: !!progress.tutorialDone, editorFinished: !!progress.editorFinished };
+}
+
+function unlockedSkinIds() {
+  const stats = skinStats();
+  return new Set(SKINS.filter((sk) => isSkinUnlocked(sk, stats)).map((sk) => sk.id));
+}
+
 const canvas = $('game');
 const renderer = new Renderer(canvas);
 const settings = storage.getSettings();
 const sound = new Sound(settings.muted);
 const input = new Input(canvas);
 const progress = storage.getProgress();
+
+function equipSkin(id) {
+  const skin = getSkin(id);
+  settings.skin = skin.id;
+  storage.setSettings(settings);
+  applySkin(skin.colors);
+}
+equipSkin(unlockedSkinIds().has(settings.skin) ? settings.skin : 'standard');
+
+function buildSkinGrid() {
+  const stats = skinStats();
+  ui.skinGrid.innerHTML = '';
+  for (const sk of SKINS) {
+    const unlocked = isSkinUnlocked(sk, stats);
+    const equipped = settings.skin === sk.id;
+    const c = sk.colors;
+    const card = document.createElement('button');
+    card.className = `skin-card${unlocked ? '' : ' locked'}${equipped ? ' equipped' : ''}`;
+    card.disabled = !unlocked;
+    card.dataset.skin = sk.id;
+    card.innerHTML = `
+      <span class="skin-swatch" style="--body:${c.body};--dark:${c.dark};--accent:${c.accent};--glow:${c.glow}">
+        <i class="sw-body"></i><i class="sw-rail"></i><i class="sw-ring"></i><i class="sw-grip"></i>
+      </span>
+      <span class="skin-name">${sk.name}</span>
+      <span class="skin-status">${equipped ? 'Equipped' : unlocked ? 'Click to equip' : skinRequirement(sk, stats)}</span>`;
+    card.addEventListener('click', () => {
+      if (!isSkinUnlocked(sk, skinStats())) return;
+      equipSkin(sk.id);
+      buildSkinGrid();
+    });
+    ui.skinGrid.appendChild(card);
+  }
+}
+
+// Call before and after progress changes; announces newly unlocked skins.
+function announceNewSkins(before) {
+  const fresh = SKINS.filter((sk) => !before.has(sk.id) && unlockedSkinIds().has(sk.id));
+  if (!fresh.length) return '';
+  sound.unlock();
+  return `<div class="fm-skin">New gun skin unlocked: <b>${fresh.map((sk) => sk.name).join(', ')}</b>! Equip it from <b>Gun</b> in the menu.</div>`;
+}
 
 // --- Level state --------------------------------------------------------------
 
@@ -199,6 +252,7 @@ function restart() {
 function showScreen(name) {
   for (const s of ui.screens) s.classList.toggle('hidden', s.id !== `screen-${name}`);
   if (name === 'levels') buildLevelGrid();
+  if (name === 'skins') buildSkinGrid();
   if (name === 'main') refreshMainScreen();
 }
 
@@ -254,6 +308,7 @@ function setState(next) {
 
 function finishTutorial(e) {
   sound.finish();
+  const skinsBefore = unlockedSkinIds();
   progress.tutorialDone = true;
   storage.setProgress(progress);
   if (!best || e.time < best.time) {
@@ -266,7 +321,7 @@ function finishTutorial(e) {
   ui.finishNote.textContent = "You've got the basics. Time for the real thing.";
   ui.finishNote.className = 'record';
   ui.finishHint.innerHTML = '<kbd>N</kbd> start Level 1 · <kbd>R</kbd> try again · <kbd>Esc</kbd> menu';
-  ui.finishMedal.innerHTML = '';
+  ui.finishMedal.innerHTML = announceNewSkins(skinsBefore);
   ui.tutorial.classList.add('hidden');
   state = 'finished';
   ui.finish.classList.remove('hidden');
@@ -276,6 +331,7 @@ function finishLevel(e) {
   if (level.tutorial) return finishTutorial(e);
   sound.finish();
   const isRecord = !best || e.time < best.time;
+  const skinsBefore = unlockedSkinIds();
   const oldMedal = medalFor(level, best?.time);
   const runMedal = medalFor(level, e.time);
   const newMedal = runMedal && (!oldMedal || MEDALS.indexOf(runMedal) < MEDALS.indexOf(oldMedal));
@@ -301,6 +357,7 @@ function finishLevel(e) {
     ? `<div class="fm-next">Next: ${medalBadge(next)} ${MEDAL_NAME[next]} at ${formatTime(level.medals[next])}</div>`
     : bestMedal === 'gold' ? '<div class="fm-next">You have gold on this level!</div>' : '';
   if (newMedal) sound.medal(runMedal);
+  ui.finishMedal.innerHTML += announceNewSkins(skinsBefore);
   const hasNext = level.index + 1 < LEVELS.length;
   if (hasNext && progress.unlocked < level.index + 2) {
     progress.unlocked = level.index + 2;
@@ -418,6 +475,7 @@ ui.restartBtn.addEventListener('click', () => {
 });
 ui.levelsBtn.addEventListener('click', () => showScreen('levels'));
 ui.controlsBtn.addEventListener('click', () => showScreen('controls'));
+ui.skinsBtn.addEventListener('click', () => showScreen('skins'));
 ui.tutorialBtn.addEventListener('click', () => {
   loadTutorial();
   startPlaying();
@@ -513,4 +571,5 @@ window.__skyhook = {
   get state() { return state; },
   get lastRelease() { return lastRelease; },
   renderer, restart, loadLevel, loadTutorial, formatTime, TUNING, medalCounts,
+  get skin() { return settings.skin; },
 };

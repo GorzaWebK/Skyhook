@@ -5,6 +5,7 @@ import { generateLevel, levelParams, isHookable, buildTutorialCourse } from '../
 import { TUTORIAL_STEPS, createTutorialFlags } from '../src/tutorial.js';
 import { LEVELS, buildLevel, medalTimes, medalFor, nextMedal } from '../src/levels.js';
 import { LEVEL_PAR } from '../src/level-seeds.js';
+import { SKINS, isSkinUnlocked, skinRequirement } from '../src/skins.js';
 import { createPlayer, step, tryHook, releaseHook, raycast, aimDirection, TUNING, FIXED_DT } from '../src/physics.js';
 import { createRun, tick } from '../src/run.js';
 import { createBot, botInput } from '../src/bot.js';
@@ -249,4 +250,19 @@ test('medal times and awarding', () => {
   assert.equal(nextMedal(level, 22), 'gold');
   assert.equal(nextMedal(level, 20), null);
   for (const l of LEVELS) assert.ok(l.medals.gold < l.medals.silver && l.medals.silver < l.medals.bronze);
+});
+
+test('gun skins unlock from progress', () => {
+  const none = { medals: { gold: 0, silver: 0, bronze: 0 }, tutorialDone: false, editorFinished: false };
+  const unlocked = (stats) => SKINS.filter((sk) => isSkinUnlocked(sk, stats)).map((sk) => sk.id);
+  assert.deepEqual(unlocked(none), ['standard']);
+  assert.ok(unlocked({ ...none, tutorialDone: true }).includes('rookie'));
+  assert.ok(unlocked({ ...none, editorFinished: true }).includes('architect'));
+  const some = { ...none, medals: { gold: 0, silver: 5, bronze: 5 } };
+  assert.ok(unlocked(some).includes('bronze') && unlocked(some).includes('cobalt'));
+  assert.ok(!unlocked(some).includes('crimson'));
+  const all = { medals: { gold: 30, silver: 30, bronze: 30 }, tutorialDone: true, editorFinished: true };
+  assert.equal(unlocked(all).length, SKINS.length);
+  assert.equal(skinRequirement(SKINS.find((sk) => sk.id === 'gilded'), some), 'Earn 10 gold medals (0 / 10)');
+  assert.equal(new Set(SKINS.map((sk) => sk.id)).size, SKINS.length, 'unique ids');
 });

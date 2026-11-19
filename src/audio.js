@@ -165,6 +165,12 @@ export class Sound {
     );
   }
 
+  unlock() {
+    [880, 1109, 1319, 1760].forEach((f, i) =>
+      this.tone({ type: 'sine', freq: f, dur: 0.4, gain: 0.12, delay: 1.4 + i * 0.1 })
+    );
+  }
+
   fall() {
     this.tone({ type: 'sawtooth', freq: 400, to: 80, dur: 0.5, gain: 0.08 });
   }

@@ -217,12 +217,38 @@ async function waitForServer() {
       state = await g(() => window.__skyhook.state);
     }
     check(state === 'finished' && (await page.textContent('#finish-title')) === 'Tutorial complete!', 'finishing the tutorial shows "Tutorial complete!"');
+    check((await page.textContent('#finish-medal')).includes('New gun skin unlocked: Rookie Teal'), 'finishing the tutorial unlocks the Rookie Teal gun skin');
     await page.keyboard.press('KeyN');
     await page.waitForTimeout(500);
     check(await g(() => window.__skyhook.level.number === 1 && !window.__skyhook.tutorial), 'N after the tutorial starts level 1');
     await page.goto(URL);
     await page.waitForTimeout(800);
     check(await g(() => !document.getElementById('tutorial-btn').classList.contains('highlight')), 'Tutorial highlight goes away once it is done');
+
+    // Gun skins page: locked/unlocked cards, equipping recolours the 3D gun.
+    await g(() => {
+      for (let i = 1; i <= 5; i++) {
+        const l = window.__skyhook; // silver-or-better on levels 1-5 via near-gold times
+        localStorage.setItem(`skyhook.best.level-${i}`, JSON.stringify({ time: 1 }));
+      }
+    });
+    await page.goto(URL);
+    await page.waitForTimeout(1000);
+    await page.click('#skins-btn');
+    check(await page.isVisible('#screen-skins'), 'Gun button opens the gun skins page');
+    const cards = await page.$$eval('.skin-card', (els) => els.map((e) => ({ id: e.dataset.skin, locked: e.disabled, text: e.textContent })));
+    check(cards.length === 9, `9 gun skins listed (${cards.length})`);
+    const open = cards.filter((c) => !c.locked).map((c) => c.id).sort().join(',');
+    check(open === 'bronze,cobalt,rookie,standard', `skins unlocked by 5 golds + tutorial: ${open}`);
+    check(cards.find((c) => c.id === 'gilded').text.includes('5 / 10'), 'locked skins show progress towards unlocking');
+    await page.click('.skin-card[data-skin="cobalt"]');
+    await page.waitForTimeout(300);
+    check(await g(() => window.__skyhook.skin === 'cobalt' && window.__skyhook.renderer.viewModel.gun.children[0].material.color.getHexString() === '3261c9'),
+      'equipping Cobalt recolours the gun');
+    await page.screenshot({ path: 'test-results/skins.png' });
+    await page.reload();
+    await page.waitForTimeout(1000);
+    check(await g(() => window.__skyhook.skin === 'cobalt'), 'equipped skin is remembered after a reload');
 
     // Late levels render with smooth blocks and no errors.
     await page.goto(`${URL}?unlock=all&level=30`);

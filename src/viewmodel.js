@@ -14,6 +14,16 @@ const MAT = {
   cuff: new THREE.MeshStandardMaterial({ color: '#203754', roughness: 0.95 }),
 };
 
+// Recolour the gun (and the flying hook head, which shares materials).
+export function applySkin(colors) {
+  MAT.gunmetal.color.set(colors.body);
+  MAT.dark.color.set(colors.dark);
+  MAT.accent.color.set(colors.accent);
+  MAT.accent.emissive.set(colors.accent);
+  MAT.glow.color.set(colors.glow);
+  MAT.glow.emissive.set(colors.glow);
+}
+
 function mesh(geo, mat, x = 0, y = 0, z = 0) {
   const m = new THREE.Mesh(geo, mat);
   m.position.set(x, y, z);
