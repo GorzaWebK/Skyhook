@@ -103,7 +103,7 @@
       }
       .settings { display: flex; gap: 20px; align-items: center; font-size: 14px; color: var(--muted); margin-top: 10px; flex-wrap: wrap; }
       .settings label { display: flex; align-items: center; gap: 8px; pointer-events: auto; cursor: pointer; }
-      .settings input[type='range'] { width: 140px; accent-color: var(--accent); }
+      .settings input[type='range'] { width: 110px; accent-color: var(--accent); }
       .course-line { display: flex; justify-content: space-between; font-size: 15px; padding: 10px 0; border-top: 1px solid rgba(255,255,255,0.1); border-bottom: 1px solid rgba(255,255,255,0.1); }
       .course-line b { color: var(--gold); font-family: ui-monospace, Consolas, monospace; }
       #finish-time { font: 800 56px/1 ui-monospace, Consolas, monospace; color: var(--gold); margin: 6px 0; }
@@ -228,7 +228,8 @@
         <p class="new-hint" id="new-hint">New here? Start with the <b>Tutorial</b>.</p>
         <div class="settings">
           <label>Mouse sensitivity <input id="sens" type="range" min="0.2" max="3" step="0.05" /> <span id="sens-val"></span></label>
-          <label><input id="mute" type="checkbox" /> Mute</label>
+          <label>Music <input id="music-vol" type="range" min="0" max="1" step="0.05" /></label>
+          <label><input id="mute" type="checkbox" /> Mute all</label>
         </div>
       </div>
 

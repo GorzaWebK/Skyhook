@@ -250,6 +250,40 @@ async function waitForServer() {
     await page.waitForTimeout(1000);
     check(await g(() => window.__skyhook.skin === 'cobalt'), 'equipped skin is remembered after a reload');
 
+    // Music: render it offline and measure it (we can't listen in a test).
+    const audio = await g(async () => {
+      const { Music } = window.__skyhook;
+      async function render(level) {
+        const ctx = new OfflineAudioContext(1, 44100 * 5, 44100);
+        const m = new Music(ctx, ctx.destination, 1);
+        m.setIntensity(level);
+        m.level = level;
+        m.schedule(4.6);
+        const buf = await ctx.startRendering();
+        const d = buf.getChannelData(0);
+        let sum = 0, peak = 0, hf = 0;
+        for (let i = 1; i < d.length; i++) {
+          sum += d[i] * d[i];
+          peak = Math.max(peak, Math.abs(d[i]));
+          hf += (d[i] - d[i - 1]) ** 2; // high-frequency energy (drums, hats)
+        }
+        return { rms: Math.sqrt(sum / d.length), peak, hf: Math.sqrt(hf / d.length), notes: m.notesPlayed };
+      }
+      return { calm: await render(0), fast: await render(1) };
+    });
+    check(audio.calm.rms > 0.005 && audio.fast.rms > 0.005, `music makes sound (rms calm ${audio.calm.rms.toFixed(3)}, fast ${audio.fast.rms.toFixed(3)})`);
+    check(audio.fast.peak < 1 && audio.calm.peak < 1, `music doesn't clip (peaks ${audio.calm.peak.toFixed(2)}, ${audio.fast.peak.toFixed(2)})`);
+    check(audio.fast.notes > audio.calm.notes * 2 && audio.fast.hf > audio.calm.hf * 1.5,
+      `music gets busier at speed (${audio.calm.notes} -> ${audio.fast.notes} notes, drums/hats energy x${(audio.fast.hf / audio.calm.hf).toFixed(1)})`);
+    await page.goto(`${URL}?level=1`);
+    await page.waitForTimeout(800);
+    await page.click('#play-btn');
+    await page.waitForTimeout(1500);
+    check(await g(() => window.__skyhook.music && window.__skyhook.music.notesPlayed > 0 && window.__skyhook.music.ctx.state === 'running'),
+      'music starts playing when you click Play');
+    await g(() => document.exitPointerLock());
+    await page.waitForTimeout(300);
+
     // Late levels render with smooth blocks and no errors.
     await page.goto(`${URL}?unlock=all&level=30`);
     await page.waitForTimeout(1500);

@@ -48,6 +48,7 @@ The full controls list sits behind the **Controls** button on the main menu.
 - **Falling:** Drop into the clouds and you go back to your last checkpoint while the clock keeps running. Before the first checkpoint, the run starts over.
 - **Grapple gun:** You hold a grapple gun in a gloved hand, drawn in first person and built from shapes in code. It sways as you look around, bobs as you walk, leans when you strafe, kicks when you fire, and its glowing spool spins when you reel in.
 - **Rope shot:** The hook visibly flies from the gun's muzzle to the block at 250 m/s, with the rope wiggling behind it, and catches when it lands. Let go before it lands and the shot is cancelled. The rope snaps taut when it catches and sags when it goes slack.
+- **Music:** A generated soundtrack (A minor, 100 BPM) that builds with your speed. A calm pad and bass play in the menu or when standing still. An arpeggio joins when you move, kick and hi-hats when you swing fast, and snare and a busier bass when you're flying. It has its own volume slider in the menu, and **M** mutes everything.
 - **Feel:** The view widens with speed, the camera shakes on hard landings and when the hook catches, and wind and rope-creak sounds follow your speed.
 - **Settings:** Mouse sensitivity and mute, both saved.
 
@@ -74,6 +75,7 @@ The full controls list sits behind the **Controls** button on the main menu.
 | `src/rope.js` | Rope drawn as a camera-facing strip |
 | `src/textures.js` | Textures drawn on a canvas |
 | `src/audio.js` | Synthesised sound effects |
+| `src/music.js` | Generated music that follows your speed |
 | `src/input.js` | Keyboard, mouse and pointer lock |
 | `src/storage.js` | Best times and settings (localStorage) |
 | `src/bot.js` | Autopilot used by tests |
@@ -99,4 +101,3 @@ Every push to `main` runs the tests, builds and deploys to GitHub Pages via `.gi
 - Daily course from a shared seed
 - Moving anchors and obstacles
 - Course editor and sharing
-- Music generated in code

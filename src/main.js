@@ -6,6 +6,7 @@ import { createRun, restartRun, tick, hook, unhook } from './run.js';
 import { createBot, botInput } from './bot.js';
 import { Renderer } from './render.js';
 import { Sound } from './audio.js';
+import { Music } from './music.js';
 import { Input } from './input.js';
 import { storage } from './storage.js';
 import { SKINS, getSkin, isSkinUnlocked, skinRequirement } from './skins.js';
@@ -25,7 +26,7 @@ const ui = {
   tutorial: $('tutorial'), tutStep: $('tut-step'), tutText: $('tut-text'),
   courseName: $('course-name'), menuBest: $('menu-best'),
   levelGrid: $('level-grid'), levelProgress: $('level-progress'),
-  sens: $('sens'), sensVal: $('sens-val'), mute: $('mute'),
+  sens: $('sens'), sensVal: $('sens-val'), mute: $('mute'), musicVol: $('music-vol'),
   finish: $('finish'), finishTitle: $('finish-title'), finishTime: $('finish-time'),
   finishNote: $('finish-note'), finishHint: $('finish-hint'), finishMedal: $('finish-medal'),
   medalTotals: $('medal-totals'),
@@ -70,6 +71,15 @@ const renderer = new Renderer(canvas);
 const settings = storage.getSettings();
 const sound = new Sound(settings.muted);
 const input = new Input(canvas);
+let music = null; // created on the first click (browsers block audio before that)
+
+function startAudio() {
+  sound.init();
+  if (!music && sound.ctx) {
+    music = new Music(sound.ctx, sound.master, settings.musicVolume ?? 0.6);
+    music.start();
+  }
+}
 const progress = storage.getProgress();
 
 function equipSkin(id) {
@@ -442,7 +452,13 @@ input.handlers.key = (code) => {
   }
   if (code === 'KeyM') {
     settings.muted = !settings.muted;
-    ui.mute.checked = settings.muted;
+    ui.musicVol.value = settings.musicVolume ?? 0.6;
+ui.musicVol.addEventListener('input', () => {
+  settings.musicVolume = Number(ui.musicVol.value);
+  music?.setVolume(settings.musicVolume);
+  storage.setSettings(settings);
+});
+ui.mute.checked = settings.muted;
     sound.setMuted(settings.muted);
     storage.setSettings(settings);
   }
@@ -459,7 +475,7 @@ input.handlers.lockChange = (locked) => {
 };
 
 function startPlaying() {
-  sound.init();
+  startAudio();
   if (botMode) {
     if (run.finished) restart();
     setState('playing');
@@ -487,6 +503,12 @@ ui.sensVal.textContent = `${Number(settings.sensitivity).toFixed(2)}x`;
 ui.sens.addEventListener('input', () => {
   settings.sensitivity = Number(ui.sens.value);
   ui.sensVal.textContent = `${settings.sensitivity.toFixed(2)}x`;
+  storage.setSettings(settings);
+});
+ui.musicVol.value = settings.musicVolume ?? 0.6;
+ui.musicVol.addEventListener('input', () => {
+  settings.musicVolume = Number(ui.musicVol.value);
+  music?.setVolume(settings.musicVolume);
   storage.setSettings(settings);
 });
 ui.mute.checked = settings.muted;
@@ -548,6 +570,8 @@ function frame(now) {
   const speed = p.vel.length();
   ui.speed.firstChild.textContent = Math.round(speed);
   sound.update(state === 'menu' ? 0 : speed, !!p.hook);
+  // Music builds up with speed (and a little while swinging).
+  music?.setIntensity(state === 'playing' ? Math.min(1, Math.max(0, (speed - 4) / 40) + (p.hook ? 0.1 : 0)) : 0);
 
   if (toastTimer > 0 && (toastTimer -= dt) <= 0) ui.toast.classList.remove('show');
   if (splitTimer > 0 && (splitTimer -= dt) <= 0) ui.split.classList.remove('show');
@@ -572,4 +596,6 @@ window.__skyhook = {
   get lastRelease() { return lastRelease; },
   renderer, restart, loadLevel, loadTutorial, formatTime, TUNING, medalCounts,
   get skin() { return settings.skin; },
+  get music() { return music; },
+  Music,
 };
