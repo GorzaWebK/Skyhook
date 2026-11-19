@@ -5,6 +5,7 @@ import { onlineEnabled, submitScore, getLeaderboard, getRecordGhost, cleanName, 
 import { GhostRecorder, encodeGhost, decodeGhost } from './ghost.js';
 import { StatsTracker, statsRows } from './stats.js';
 import { ACHIEVEMENTS, newAchievements } from './achievements.js';
+import { Flyover } from './flyover.js';
 import { THEMES } from './themes.js';
 import { dailyFor, buildDaily, timeUntilNext, dailyStreak, dateKey } from './daily.js';
 import { TUTORIAL_STEPS, createTutorialFlags } from './tutorial.js';
@@ -54,6 +55,7 @@ const ui = {
   achPopup: $('ach-popup'), achGrid: $('ach-grid'), achSummary: $('ach-summary'),
   profileBtn: $('profile-btn'), statsGrid: $('stats-grid'), tabStats: $('tab-stats'), tabAch: $('tab-ach'),
   profileStats: $('profile-stats'), profileAch: $('profile-ach'),
+  flyoverHint: $('flyover-hint'), flyoverSetting: $('flyover-setting'),
   quality: $('quality'), showFps: $('show-fps'), fps: $('fps'), phoneNotice: $('phone-notice'), phoneContinue: $('phone-continue'),
   finish: $('finish'), finishTitle: $('finish-title'), finishTime: $('finish-time'),
   finishNote: $('finish-note'), finishHint: $('finish-hint'), finishMedal: $('finish-medal'),
@@ -100,7 +102,7 @@ const settings = storage.getSettings();
 // Defaults for settings added later (older saves don't have them).
 Object.assign(settings, {
   invertY: false, fov: 85, sfxVolume: 1, musicVolume: 0.6, shake: true, speedFx: true, ghost: 'best',
-  quality: 'high', showFps: false,
+  quality: 'high', showFps: false, flyover: true,
   ...settings,
 });
 const sound = new Sound(settings.muted);
@@ -254,6 +256,9 @@ let toastTimer = 0;
 let splitTimer = 0;
 let lastRelease = null;
 let tut = null; // { flags, step } while playing the tutorial
+let flyover = null; // the level flyover while it plays
+let flyoverPending = false; // play the flyover when this level starts
+const noFlyover = window.__SKYHOOK_NO_FLYOVER === true || params.has('bot');
 
 // --- Ghosts -------------------------------------------------------------------
 const recorder = new GhostRecorder();
@@ -335,6 +340,9 @@ function loadDef(def) {
   splits = [];
   renderer.buildCourse(course);
   renderer.setTheme(course.theme || 'day');
+  flyover = null;
+  renderer.cameraOverride = null;
+  flyoverPending = !def.tutorial && mode !== 'test';
   recorder.reset();
   loadGhosts(def);
   if (!def.tutorial && !def.custom && !def.daily) {
@@ -927,6 +935,7 @@ function buildLevelGrid() {
 
 function setState(next) {
   if (next === 'menu') saveStats();
+  if (next !== 'playing' && flyover) endFlyover();
   state = next;
   ui.menu.classList.toggle('hidden', state !== 'menu');
   ui.hud.classList.toggle('hidden', state === 'menu');
@@ -1122,7 +1131,25 @@ function currentAim() {
   return aimDirection(run.player.yaw, run.player.pitch);
 }
 
+function maybeStartFlyover() {
+  if (!flyoverPending || noFlyover || !settings.flyover || run.started) return;
+  flyoverPending = false;
+  flyover = new Flyover(course, run.player);
+  ui.flyoverHint.textContent = `${levelTitle(level)} · Space or click to skip`;
+  ui.flyoverHint.classList.add('show');
+  ui.hud.classList.add('flying');
+}
+
+function endFlyover() {
+  flyover = null;
+  renderer.cameraOverride = null;
+  ui.flyoverHint.classList.remove('show');
+  ui.hud.classList.remove('flying');
+  input.consumeMouse();
+}
+
 input.handlers.hookDown = () => {
+  if (flyover) return endFlyover();
   if (state === 'editor') {
     editor.place(run.player);
     sound.attach();
@@ -1166,6 +1193,7 @@ function editorKey(code) {
 }
 
 input.handlers.key = (code) => {
+  if (flyover && state === 'playing') return endFlyover();
   if (state === 'editor') return editorKey(code);
   if (code === 'KeyT' && mode === 'test' && state !== 'menu') return backToEditor();
   if (code === 'KeyR' && state !== 'menu') restart();
@@ -1209,6 +1237,7 @@ input.handlers.lockChange = (locked) => {
       if (resumeTo === 'editor') return setState('editor');
       if (run.finished) restart();
       setState('playing');
+      maybeStartFlyover();
     }
   } else if (!botMode) {
     const inEditor = state === 'editor' || mode === 'test';
@@ -1360,6 +1389,7 @@ ui.quality.addEventListener('change', () => {
   storage.setSettings(settings);
 });
 bindCheck(ui.showFps, 'showFps', (v) => ui.fps.classList.toggle('hidden', !v));
+bindCheck(ui.flyoverSetting, 'flyover');
 ui.fps.classList.toggle('hidden', !settings.showFps);
 
 // Phones and tablets with only a touchscreen can't play (no mouse to aim).
@@ -1415,6 +1445,12 @@ function frame(now) {
     const m = input.movement();
     editor.fly(p, { forward: m.forward, right: m.right, up: input.keys.has('Space'), down: input.keys.has('ShiftLeft') || input.keys.has('ControlLeft') }, dt);
     editor.updatePreview(p);
+    accumulator = 0;
+  } else if (flyover && state === 'playing') {
+    // Flyover: no physics, no player control.
+    input.consumeMouse();
+    renderer.cameraOverride = flyover.update(dt);
+    if (!renderer.cameraOverride) endFlyover();
     accumulator = 0;
   } else if (state === 'playing' || state === 'finished') {
     [mx, my] = input.consumeMouse();
@@ -1490,6 +1526,7 @@ window.__skyhook = {
   online: { submitScore, getLeaderboard },
   get music() { return music; },
   get stats() { return stats.s; },
+  get flyover() { return flyover; },
   get achieved() { return achieved; },
   checkAchievements,
   saveStats,

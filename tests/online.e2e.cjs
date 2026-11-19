@@ -103,7 +103,7 @@ async function browserTests() {
     const ctx1 = await browser.newContext({ viewport: { width: 1280, height: 720 } });
     const p1 = await ctx1.newPage();
     p1.on('pageerror', (e) => errors.push(e.message));
-    await p1.addInitScript(() => localStorage.setItem('skyhook.settings', JSON.stringify({ playerName: 'SkyAce' })));
+    await p1.addInitScript(() => localStorage.setItem('skyhook.settings', JSON.stringify({ flyover: false, playerName: 'SkyAce' })));
     await p1.goto(`${URL}?emulator=1&bot=1&level=1`);
     let state = '';
     for (let i = 0; i < 160 && state !== 'finished'; i++) {
@@ -121,7 +121,7 @@ async function browserTests() {
     const ctxG = await browser.newContext({ viewport: { width: 1280, height: 720 } });
     const pg = await ctxG.newPage();
     pg.on('pageerror', (e) => errors.push(e.message));
-    await pg.addInitScript(() => localStorage.setItem('skyhook.settings', JSON.stringify({ playerName: 'Chaser', ghost: 'record' })));
+    await pg.addInitScript(() => localStorage.setItem('skyhook.settings', JSON.stringify({ flyover: false, playerName: 'Chaser', ghost: 'record' })));
     await pg.goto(`${URL}?emulator=1&level=1`);
     let rec = null;
     for (let i = 0; i < 40 && !rec; i++) { await pg.waitForTimeout(250); rec = await pg.evaluate(() => window.__skyhook.ghosts.record && { name: window.__skyhook.ghosts.record.name, n: window.__skyhook.ghosts.record.samples.length }); }
@@ -133,7 +133,7 @@ async function browserTests() {
     const ctx2 = await browser.newContext({ viewport: { width: 1280, height: 720 } });
     const p2 = await ctx2.newPage();
     p2.on('pageerror', (e) => errors.push(e.message));
-    await p2.addInitScript(() => localStorage.setItem('skyhook.settings', JSON.stringify({ playerName: 'Rival' })));
+    await p2.addInitScript(() => localStorage.setItem('skyhook.settings', JSON.stringify({ flyover: false, playerName: 'Rival' })));
     await p2.goto(`${URL}?emulator=1`);
     await p2.waitForTimeout(1000);
     check(await p2.isVisible('#boards-btn'), 'Leaderboards button shows when online is switched on');

@@ -493,6 +493,11 @@ export class Renderer {
     eyePosition(player, cam.position);
     cam.rotation.y = player.yaw;
     cam.rotation.x = player.pitch;
+    // Flyover / replay camera: { pos, look } replaces the player's view.
+    if (this.cameraOverride) {
+      cam.position.copy(this.cameraOverride.pos);
+      cam.lookAt(this.cameraOverride.look);
+    }
 
     // Camera shake.
     if (this.shake > 0) {
@@ -574,7 +579,7 @@ export class Renderer {
     this.renderer.clear();
     this.renderer.render(this.scene, cam);
     if (this.speedStrength > 0.01) this.renderer.render(this.fxScene, this.viewModel.camera);
-    if (this.showViewModel !== false) {
+    if (this.showViewModel !== false && !this.cameraOverride) {
       this.renderer.clearDepth();
       this.renderer.render(this.viewModel.scene, this.viewModel.camera);
     }

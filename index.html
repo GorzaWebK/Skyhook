@@ -251,6 +251,10 @@
       .trail-swatch i { position: absolute; top: 50%; transform: translateY(-50%); border-radius: 50%; }
       .trail-swatch b { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); }
       .ap-reward { font-size: 12px; color: #7dff9a; margin-top: 2px; }
+      #flyover-hint { position: fixed; bottom: 60px; left: 50%; transform: translateX(-50%); z-index: 6; padding: 10px 18px; border-radius: 10px;
+        background: var(--panel); border: 1px solid rgba(255,255,255,0.16); font-weight: 700; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
+      #flyover-hint.show { opacity: 1; }
+      #hud.flying #crosshair, #hud.flying #speed, #hud.flying .timer-box { display: none; }
       .footer { margin-top: 16px; font-size: 12px; color: var(--muted); }
       .hud-right { position: absolute; top: 18px; right: 22px; text-align: right; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.45); }
       #level-label { font-size: 15px; font-weight: 700; }
@@ -288,6 +292,7 @@
     <canvas id="game"></canvas>
     <div id="fps" class="hidden"></div>
     <div id="ach-popup"></div>
+    <div id="flyover-hint"></div>
     <div id="phone-notice" class="overlay hidden">
       <div class="card" style="text-align:center">
         <h1 style="font-size:44px">SKY<span>HOOK</span></h1>
@@ -378,6 +383,7 @@
             <option value="low">Low (for slower PCs)</option>
           </select></span>
           <span>Show frames per second</span><span><input id="show-fps" type="checkbox" /></span>
+          <span>Level flyover before playing</span><span><input id="flyover-setting" type="checkbox" /></span>
           <span>Ghost</span><span><select id="ghost-mode">
             <option value="off">Off</option>
             <option value="best">Your best</option>

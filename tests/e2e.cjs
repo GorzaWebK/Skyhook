@@ -29,7 +29,7 @@ async function waitForServer() {
     await waitForServer();
     const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
     // Never touch the live leaderboard from tests.
-    await page.addInitScript(() => { window.__SKYHOOK_OFFLINE = true; });
+    await page.addInitScript(() => { window.__SKYHOOK_OFFLINE = true; window.__SKYHOOK_NO_FLYOVER = !localStorage.getItem('test.flyover'); });
     const errors = [];
     page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
     page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
@@ -501,6 +501,34 @@ async function waitForServer() {
     await page.goto(URL);
     await page.waitForTimeout(800);
     check((await page.textContent('#daily-info')).includes('best') && (await page.textContent('#daily-info')).includes('streak'), `main menu shows your daily best and streak ("${(await page.textContent('#daily-info')).trim()}")`);
+
+    // Level flyover.
+    await g(() => localStorage.setItem('test.flyover', '1'));
+    await page.goto(`${URL}?unlock=all&level=2`);
+    await page.waitForTimeout(800);
+    await page.click('#play-btn');
+    await page.waitForTimeout(600);
+    const fly0 = await g(() => ({ on: !!window.__skyhook.flyover, cam: window.__skyhook.renderer.camera.position.toArray() }));
+    await page.waitForTimeout(1500);
+    const fly1 = await g(() => ({ on: !!window.__skyhook.flyover, cam: window.__skyhook.renderer.camera.position.toArray() }));
+    check(fly0.on && fly1.on && await page.isVisible('#flyover-hint') && Math.hypot(...fly1.cam.map((v, i) => v - fly0.cam[i])) > 5, 'a flyover sweeps the camera along the route when a level starts');
+    await page.screenshot({ path: 'test-results/flyover.png' });
+    await page.keyboard.press('Space');
+    await page.waitForTimeout(300);
+    check(await g(() => !window.__skyhook.flyover && !window.__skyhook.renderer.cameraOverride && !window.__skyhook.run.started), 'Space skips the flyover (and the timer has not started)');
+    await page.keyboard.press('KeyR');
+    await page.waitForTimeout(400);
+    check(await g(() => !window.__skyhook.flyover), 'restarting does not replay the flyover');
+    await g(() => document.exitPointerLock());
+    await page.waitForTimeout(300);
+    await page.click('.btn#levels-btn');
+    await page.click('.level-tile[data-level="2"]');
+    await page.waitForTimeout(500);
+    let ended = false;
+    for (let i = 0; i < 40 && !ended; i++) { await page.waitForTimeout(500); ended = await g(() => !window.__skyhook.flyover); }
+    check(ended && await g(() => window.__skyhook.state === 'playing'), 'the flyover ends by itself and hands back control');
+    await g(() => { localStorage.removeItem('test.flyover'); document.exitPointerLock(); });
+    await page.waitForTimeout(300);
 
     // Sky themes, speed lines, sparks.
     for (const [lvl, theme] of [[1, 'day'], [11, 'sunset'], [21, 'night']]) {
