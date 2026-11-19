@@ -28,6 +28,8 @@ async function waitForServer() {
   try {
     await waitForServer();
     const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+    // Never touch the live leaderboard from tests.
+    await page.addInitScript(() => { window.__SKYHOOK_OFFLINE = true; });
     const errors = [];
     page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
     page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
@@ -110,12 +112,20 @@ async function waitForServer() {
     const rel = await g(() => window.__skyhook.lastRelease);
     check(rel?.hopped && rel.velY >= 10, `letting go gives the release hop (upward speed ${rel?.velY?.toFixed(1)} m/s)`);
 
+    // Drop the player in open air, well away from every block, so the fall
+    // doesn't depend on where the swing happened to land.
+    await g(() => {
+      const p = window.__skyhook.run.player;
+      p.pos.set(400, 0, 0);
+      p.vel.set(0, 0, 0);
+    });
     let fell = false;
     for (let i = 0; i < 40 && !fell; i++) {
       await page.waitForTimeout(500);
       fell = await g(() => window.__skyhook.run.falls >= 1);
     }
-    check(fell, 'falling into the clouds respawns you');
+    const back = await g(() => window.__skyhook.run.player.pos.distanceTo(window.__skyhook.course.spawn.pos) < 0.2 || window.__skyhook.run.checkpoint >= 0);
+    check(fell && back, 'falling into the clouds respawns you');
 
     await page.keyboard.press('KeyR');
     await page.waitForTimeout(400);

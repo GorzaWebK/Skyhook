@@ -34,8 +34,13 @@ wait_for http://127.0.0.1:9099/
 wait_for "http://127.0.0.1:9000/.json?ns=demo-skyhook"
 
 # Load the security rules ("owner" is the emulator's admin token).
+# RULES_FILE=firebase/database.rules.full.json tests the complete file that
+# goes into the Firebase console (Foundry Arena's rules + Skyhook's).
+RULES_FILE=${RULES_FILE:-firebase/database.rules.json}
+export RULES_FILE
+echo "Using rules: $RULES_FILE"
 code=$(curl -s --noproxy '*' -o test-results/rules-load.json -w '%{http_code}' -X PUT \
-  -H 'Authorization: Bearer owner' --data-binary @firebase/database.rules.json \
+  -H 'Authorization: Bearer owner' --data-binary "@$RULES_FILE" \
   'http://127.0.0.1:9000/.settings/rules.json?ns=demo-skyhook')
 if [ "$code" != "200" ]; then
   echo "FAIL could not load database rules (HTTP $code): $(cat test-results/rules-load.json)"

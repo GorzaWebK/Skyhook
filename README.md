@@ -53,7 +53,7 @@ The full controls list sits behind the **Controls** button on the main menu.
   - **My Levels:** Every change saves automatically. My Levels lists your levels with Play, Edit, Share and Delete.
   - **Sharing:** **Share** gives a short code (it starts with `SKY1.`) that a friend can paste into **Import a code**.
   - Finishing a level you built yourself unlocks the **Architect** gun skin.
-- **Online leaderboards:** A top 10 for every level, with your world rank shown on the finish screen and a **Leaderboards** page (with your player name) on the main menu. It's switched off until the Firebase config is added (see "Online leaderboards" below).
+- **Online leaderboards:** A top 10 for every level, with your world rank shown on the finish screen and a **Leaderboards** page (with your player name) on the main menu. It uses the shared Firebase project (see "Online leaderboards" below).
 - **Grapple gun:** You hold a grapple gun in a gloved hand, drawn in first person and built from shapes in code. It sways as you look around, bobs as you walk, leans when you strafe, kicks when you fire, and its glowing spool spins when you reel in.
 - **Rope shot:** The hook visibly flies from the gun's muzzle to the block at 250 m/s, with the rope wiggling behind it, and catches when it lands. Let go before it lands and the shot is cancelled. The rope snaps taut when it catches and sags when it goes slack.
 - **Music:** A generated soundtrack (A minor, 100 BPM) that builds with your speed. A calm pad and bass play in the menu or when standing still. An arpeggio joins when you move, kick and hi-hats when you swing fast, and snare and a busier bass when you're flying. It has its own volume slider in the menu, and **M** mutes everything.
@@ -80,7 +80,8 @@ The full controls list sits behind the **Controls** button on the main menu.
 | `src/custom.js` | Custom level checks and share codes |
 | `src/online.js` | Online leaderboards (Firebase) |
 | `src/online-config.js` | Firebase web config (null = online off) |
-| `firebase/database.rules.json` | Security rules for the leaderboards |
+| `firebase/database.rules.json` | Skyhook's security rules on their own |
+| `firebase/database.rules.full.json` | Complete rules file for the Firebase console (Foundry Arena + Skyhook) |
 | `src/skins.js` | Gun skins and their unlock rules |
 | `src/tutorial.js` | Tutorial steps and when each one is ticked off |
 | `src/render.js` | three.js scene, sky, clouds, hook head |
@@ -107,9 +108,11 @@ npm run build      # production build into dist/
 ## Online leaderboards
 
 - Scores are stored in the Firebase Realtime Database of the shared `foundry-arena` project, at `skyhook/scores/<level>/<player id>`. Players sign in anonymously behind the scenes.
-- Each player has one entry per level: their best time. The security rules in `firebase/database.rules.json` only allow you to write your own entry and only to improve your time. They also check names (1–16 letters, digits, spaces or `_ . -`), times (3 s or more) and level names, and allow no extra fields.
-- Online is switched **off** while `src/online-config.js` contains `null`. Put the project's web config there to switch it on.
-- `npm run test:online` runs the rules and leaderboard tests against the local Firebase emulators. Java is needed for the database emulator.
+- Each player has one entry per level: their best time. The security rules only allow you to write your own entry and only to improve your time. They also check names (1–16 letters, digits, spaces or `_ . -`), times (3 s or more) and level names, and allow no extra fields.
+- `firebase/database.rules.json` has Skyhook's rules on their own. `firebase/database.rules.full.json` is the **complete file for the Firebase console**: Foundry Arena's rules, unchanged, plus Skyhook's `skyhook` section. Whenever either game's rules change, the full file must be updated and pasted into the console again.
+- The web config is in `src/online-config.js`. Set it to `null` to switch online off.
+- `npm run test:online` runs the rules and leaderboard tests against the local Firebase emulators (Java is needed for the database emulator). `RULES_FILE=firebase/database.rules.full.json npm run test:online` tests the complete console file, including checks that Foundry Arena's paths still behave the same.
+- The automated browser tests run with online switched off, so they never touch the live database.
 
 ## Deploying
 

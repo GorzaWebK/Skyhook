@@ -50,6 +50,12 @@ async function rulesTests() {
   check(await ok(db.set(refB, entry('Bob', 20))), 'rules: a valid entry on another level is fine');
   const q = await db.get(db.query(db.ref(B.d, 'skyhook/scores/level-29'), db.orderByChild('time'), db.limitToFirst(10)));
   check(q.exists() && q.size === 1, 'rules: anyone can read a level leaderboard, sorted by time');
+  if ((process.env.RULES_FILE || '').includes('full')) {
+    // The merged file must leave Foundry Arena's rules working as before.
+    check(await ok(db.get(db.ref(anon.d, 'board'))), 'full rules: Foundry Arena leaderboard is still publicly readable');
+    check(!(await ok(db.get(db.ref(anon.d, 'reports')))), 'full rules: Foundry Arena reports stay private');
+    check(!(await ok(db.set(db.ref(A.d, 'somewhere-else'), 1))), 'full rules: nothing outside the known paths is writable');
+  }
 }
 
 async function waitFor(url) {
@@ -117,8 +123,9 @@ async function browserTests() {
     check((await p2.inputValue('#board-name')) === 'Rivalscript', 'player names are cleaned');
     await p2.screenshot({ path: 'test-results/online-board.png' });
 
-    // Switched off when there's no config and no emulator.
+    // Switched off (as in the automated tests): no Leaderboards button.
     const p3 = await (await browser.newContext()).newPage();
+    await p3.addInitScript(() => { window.__SKYHOOK_OFFLINE = true; });
     await p3.goto(URL);
     await p3.waitForTimeout(800);
     check(!(await p3.isVisible('#boards-btn')), 'Leaderboards button is hidden while online is switched off');

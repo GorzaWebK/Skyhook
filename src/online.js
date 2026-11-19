@@ -10,7 +10,11 @@ import { ONLINE_CONFIG } from './online-config.js';
 const params = new URLSearchParams(typeof location !== 'undefined' ? location.search : '');
 const useEmulator = params.has('emulator');
 
-export const onlineEnabled = !!ONLINE_CONFIG || useEmulator;
+// Automated tests set window.__SKYHOOK_OFFLINE so they never touch the live
+// database.
+const forcedOffline = typeof window !== 'undefined' && window.__SKYHOOK_OFFLINE === true;
+
+export const onlineEnabled = useEmulator || (!!ONLINE_CONFIG && !forcedOffline);
 
 const TIMEOUT_MS = 8000;
 let connecting = null;
