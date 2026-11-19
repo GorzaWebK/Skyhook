@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { Vector3 } from 'three';
 import { generateLevel, levelParams, isHookable, buildTutorialCourse } from '../src/course.js';
 import { TUTORIAL_STEPS, createTutorialFlags } from '../src/tutorial.js';
-import { LEVELS, buildLevel } from '../src/levels.js';
+import { LEVELS, buildLevel, medalTimes, medalFor, nextMedal } from '../src/levels.js';
+import { LEVEL_PAR } from '../src/level-seeds.js';
 import { createPlayer, step, tryHook, releaseHook, raycast, aimDirection, TUNING, FIXED_DT } from '../src/physics.js';
 import { createRun, tick } from '../src/run.js';
 import { createBot, botInput } from '../src/bot.js';
@@ -227,5 +228,25 @@ for (const level of LEVELS) {
     assert.ok(finish, `did not finish; got to z=${run.player.pos.z.toFixed(1)}, target anchor ${bot.target}/${course.anchors.length}, falls ${run.falls}`);
     assert.deepEqual(checkpoints, course.checkpoints.map((cp) => cp.index));
     assert.equal(run.falls, 0, 'bot fell');
+    // Medal times come from the autopilot: if this fails, physics or the bot
+    // changed and scripts/find-seeds.mjs needs re-running.
+    assert.ok(Math.abs(finish.time - LEVEL_PAR[level.index]) < 0.002, `par ${LEVEL_PAR[level.index]} vs bot ${finish.time}`);
+    assert.ok(finish.time <= level.medals.gold, 'autopilot earns gold');
   });
 }
+
+test('medal times and awarding', () => {
+  const m = medalTimes(20.2);
+  assert.deepEqual(m, { gold: 20.5, silver: 26.5, bronze: 35.5 });
+  const level = { medals: m };
+  assert.equal(medalFor(level, 20.5), 'gold');
+  assert.equal(medalFor(level, 20.6), 'silver');
+  assert.equal(medalFor(level, 35.5), 'bronze');
+  assert.equal(medalFor(level, 35.6), null);
+  assert.equal(medalFor(level, null), null);
+  assert.equal(nextMedal(level, null), 'bronze');
+  assert.equal(nextMedal(level, 30), 'silver');
+  assert.equal(nextMedal(level, 22), 'gold');
+  assert.equal(nextMedal(level, 20), null);
+  for (const l of LEVELS) assert.ok(l.medals.gold < l.medals.silver && l.medals.silver < l.medals.bronze);
+});

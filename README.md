@@ -39,6 +39,7 @@ The full controls list sits behind the **Controls** button on the main menu.
   - bigger zig-zags left, right, up and down
   - checkpoints further apart
   - from level 13, dark **smooth blocks** that your hook can't grab. They sit in your swing path and can block your aim.
+- **Medals:** Every level has gold, silver and bronze target times. Gold is the autopilot's own time, silver is 30% slower and bronze 75% slower. The HUD shows the next medal to aim for, the finish screen shows what you earned, and the level select shows your medal on each level plus your totals.
 - **Proven finishable:** Every level is checked by the autopilot (see below) to make sure it can be finished without falling.
 - **Checkpoints and finish:** Tall columns of light. Flying through them anywhere counts.
 - **Timer and best times:** The clock starts when you leave the start platform. Your best time and checkpoint splits for each level, and which levels you've unlocked, are saved in the browser.
@@ -53,7 +54,7 @@ The full controls list sits behind the **Controls** button on the main menu.
 
 - Plain JavaScript + [Vite](https://vite.dev), [three.js](https://threejs.org) for 3D, and the Web Audio API for sound.
 - Levels are generated from a seed and a difficulty (`src/course.js`, `src/levels.js`), so the same seed always gives the same layout.
-- `scripts/find-seeds.mjs` picks a seed for each level that the autopilot can finish and writes them to `src/level-seeds.js`. Rerun it after changing the generator, physics or bot.
+- `scripts/find-seeds.mjs` picks a seed for each level that the autopilot can finish, and records the autopilot's time (the gold medal time). Both are written to `src/level-seeds.js`. Rerun it after changing the generator, physics or bot.
 - Physics and game rules (`src/physics.js`, `src/run.js`) contain no drawing code. They run on a fixed 120 Hz timestep, so the game plays the same at any frame rate and can be tested in Node.
 - An autopilot (`src/bot.js`) flies the levels. The tests use it to prove all 30 can be finished. Add `?bot=1` to the URL to watch it play.
 - Testing helpers: `?level=N` opens level N (if unlocked), `?tutorial=1` opens the tutorial, and `?unlock=all` unlocks every level for that visit without saving.

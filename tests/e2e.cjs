@@ -135,6 +135,11 @@ async function waitForServer() {
     await page.reload();
     await page.waitForTimeout(1500);
     check((await page.textContent('#menu-best')) === '0:42.500', 'best time survives a reload');
+    await page.click('#play-btn');
+    await page.waitForTimeout(500);
+    check((await page.textContent('#target')).trim() === 'Bronze 0:20.500', `HUD shows the next medal to aim for ("${(await page.textContent('#target')).trim()}")`);
+    await g(() => document.exitPointerLock());
+    await page.waitForTimeout(300);
 
     // Autopilot: full course in the real game, beating the stored best.
     await page.goto(`${URL}?bot=1`);
@@ -146,6 +151,7 @@ async function waitForServer() {
     const run = await g(() => ({ t: window.__skyhook.run.time, cp: window.__skyhook.run.checkpoint, cps: window.__skyhook.course.checkpoints.length, falls: window.__skyhook.run.falls }));
     check(state === 'finished' && run.cp === run.cps - 1 && run.falls === 0, `autopilot finishes level 1 in the browser (${run.t.toFixed(3)} s)`);
     check((await page.textContent('#finish-note')).startsWith('New best!'), 'finish screen announces a new best');
+    check((await page.textContent('#finish-medal')).includes('New Gold medal!') && await page.isVisible('#finish-medal .medal-gold.big'), 'finishing at autopilot pace awards a gold medal');
     check(await g(() => JSON.parse(localStorage.getItem('skyhook.progress')).unlocked === 2), 'finishing level 1 unlocks level 2');
     await page.waitForTimeout(3000);
     check(await g(() => window.__skyhook.run.player.vel.length() < 5), 'player settles into a hover after finishing');
@@ -160,6 +166,8 @@ async function waitForServer() {
     await page.click('#levels-btn');
     const t2 = await page.$$eval('.level-tile', (els) => els.map((e) => e.disabled));
     check(!t2[0] && !t2[1] && t2[2], 'level select shows levels 1-2 open, 3 locked');
+    check(await page.isVisible('.level-tile[data-level="0"] .medal-gold'), 'level select shows the gold medal on level 1');
+    check((await page.textContent('#medal-totals')).replace(/\s+/g, ' ').trim().startsWith('1'), 'level select shows medal totals');
     await page.screenshot({ path: 'test-results/level-select.png' });
     await page.click('.level-tile[data-level="1"]');
     await page.waitForTimeout(800);

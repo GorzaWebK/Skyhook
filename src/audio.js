@@ -158,6 +158,13 @@ export class Sound {
     );
   }
 
+  medal(kind) {
+    const base = { bronze: 523, silver: 659, gold: 784 }[kind] || 523;
+    [1, 1.25, 1.5, 2].forEach((m, i) =>
+      this.tone({ type: 'triangle', freq: base * m, dur: 0.35, gain: 0.16, delay: 0.9 + i * 0.08 })
+    );
+  }
+
   fall() {
     this.tone({ type: 'sawtooth', freq: 400, to: 80, dur: 0.5, gain: 0.08 });
   }

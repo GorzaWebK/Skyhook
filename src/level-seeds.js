@@ -2,3 +2,6 @@
 // checked to be finishable by the autopilot. Re-run the script after
 // changing the course generator, physics or bot.
 export const LEVEL_SEEDS = [1003,2000,3000,4000,5000,6000,7003,8000,9000,10000,11000,12000,13000,14001,15000,16000,17001,18000,19001,20000,21000,22000,23000,24000,25000,26000,27000,28001,29001,30001];
+
+// The autopilot's finish time on each level (seconds). Gold medal time.
+export const LEVEL_PAR = [11.658,13.442,10.117,8.658,15.408,14.517,15.892,11.7,23.117,12.6,14,25.458,16.317,21.433,28.583,27.158,21.1,29.675,24.408,25.433,24.275,24.867,26.825,29.975,25.667,27.95,41.433,26.25,31.567,28.075];

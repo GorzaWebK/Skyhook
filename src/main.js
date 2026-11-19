@@ -1,6 +1,6 @@
 import { isHookable, insideBox, buildTutorialCourse } from './course.js';
 import { TUTORIAL_STEPS, createTutorialFlags } from './tutorial.js';
-import { LEVELS, buildLevel } from './levels.js';
+import { LEVELS, MEDALS, buildLevel, medalFor, nextMedal } from './levels.js';
 import { raycast, eyePosition, aimDirection, FIXED_DT, TUNING } from './physics.js';
 import { createRun, restartRun, tick, hook, unhook } from './run.js';
 import { createBot, botInput } from './bot.js';
@@ -15,7 +15,7 @@ const unlockAll = params.get('unlock') === 'all';
 
 const $ = (id) => document.getElementById(id);
 const ui = {
-  hud: $('hud'), timer: $('timer'), best: $('best'), split: $('split'), speed: $('speed'),
+  hud: $('hud'), timer: $('timer'), best: $('best'), target: $('target'), split: $('split'), speed: $('speed'),
   cp: $('cp'), levelLabel: $('level-label'), crosshair: $('crosshair'), toast: $('toast'),
   menu: $('menu'), screens: document.querySelectorAll('.screen'),
   playBtn: $('play-btn'), restartBtn: $('restart-btn'), levelsBtn: $('levels-btn'), controlsBtn: $('controls-btn'),
@@ -25,7 +25,8 @@ const ui = {
   levelGrid: $('level-grid'), levelProgress: $('level-progress'),
   sens: $('sens'), sensVal: $('sens-val'), mute: $('mute'),
   finish: $('finish'), finishTitle: $('finish-title'), finishTime: $('finish-time'),
-  finishNote: $('finish-note'), finishHint: $('finish-hint'),
+  finishNote: $('finish-note'), finishHint: $('finish-hint'), finishMedal: $('finish-medal'),
+  medalTotals: $('medal-totals'),
 };
 
 export function formatTime(t) {
@@ -33,6 +34,24 @@ export function formatTime(t) {
   const m = Math.floor(t / 60);
   const s = t - m * 60;
   return `${m}:${s.toFixed(3).padStart(6, '0')}`;
+}
+
+const MEDAL_NAME = { gold: 'Gold', silver: 'Silver', bronze: 'Bronze' };
+
+export function medalBadge(m, big = false) {
+  return m ? `<span class="medal medal-${m}${big ? ' big' : ''}" title="${MEDAL_NAME[m]}"></span>` : '';
+}
+
+// Medals earned across all levels. A gold also counts as a silver and a
+// bronze ("silver or better").
+export function medalCounts() {
+  const c = { gold: 0, silver: 0, bronze: 0 };
+  for (const l of LEVELS) {
+    const m = medalFor(l, storage.getBest(l.id)?.time);
+    if (!m) continue;
+    for (const tier of MEDALS.slice(MEDALS.indexOf(m))) c[tier]++;
+  }
+  return c;
 }
 
 const canvas = $('game');
@@ -132,9 +151,14 @@ function updateTutorial(target) {
 }
 
 function refreshBest() {
-  ui.best.textContent = best ? `Best ${formatTime(best.time)}` : 'No best time yet';
-  ui.menuBest.textContent = best ? formatTime(best.time) : '--';
+  const medal = medalFor(level, best?.time);
+  ui.best.innerHTML = best ? `Best ${formatTime(best.time)}${medalBadge(medal)}` : 'No best time yet';
+  ui.menuBest.innerHTML = best ? `${formatTime(best.time)}${medalBadge(medal)}` : '--';
   ui.courseName.textContent = levelTitle(level);
+  const next = nextMedal(level, best?.time);
+  ui.target.innerHTML = level.medals && next
+    ? `${medalBadge(next)} ${MEDAL_NAME[next]} ${formatTime(level.medals[next])}`
+    : level.medals ? 'All medals earned!' : '';
 }
 
 function showToast(text, color) {
@@ -190,16 +214,23 @@ function refreshMainScreen() {
 function buildLevelGrid() {
   const done = LEVELS.filter((l) => storage.getBest(l.id)).length;
   ui.levelProgress.textContent = `${done} / ${LEVELS.length} complete`;
+  const counts = { gold: 0, silver: 0, bronze: 0 };
+  for (const l of LEVELS) {
+    const m = medalFor(l, storage.getBest(l.id)?.time);
+    if (m) counts[m]++;
+  }
+  ui.medalTotals.innerHTML = MEDALS.map((m) => `${medalBadge(m)} ${counts[m]}`).join(' &nbsp; ');
   ui.levelGrid.innerHTML = '';
   for (const l of LEVELS) {
     const unlocked = isUnlocked(l.index);
     const b = storage.getBest(l.id);
+    const medal = medalFor(l, b?.time);
     const tile = document.createElement('button');
     tile.className = `level-tile${unlocked ? '' : ' locked'}${b ? ' done' : ''}${l.index === level.index ? ' current' : ''}`;
     tile.disabled = !unlocked;
     tile.dataset.level = String(l.index);
     tile.innerHTML = `
-      <span class="lt-num">${l.number}</span>
+      <span class="lt-num">${l.number}${medalBadge(medal)}</span>
       <span class="lt-name">${l.name}</span>
       <span class="lt-best">${unlocked ? (b ? formatTime(b.time) : 'Not finished') : 'Locked'}</span>`;
     tile.addEventListener('click', () => {
@@ -235,6 +266,7 @@ function finishTutorial(e) {
   ui.finishNote.textContent = "You've got the basics. Time for the real thing.";
   ui.finishNote.className = 'record';
   ui.finishHint.innerHTML = '<kbd>N</kbd> start Level 1 · <kbd>R</kbd> try again · <kbd>Esc</kbd> menu';
+  ui.finishMedal.innerHTML = '';
   ui.tutorial.classList.add('hidden');
   state = 'finished';
   ui.finish.classList.remove('hidden');
@@ -244,6 +276,9 @@ function finishLevel(e) {
   if (level.tutorial) return finishTutorial(e);
   sound.finish();
   const isRecord = !best || e.time < best.time;
+  const oldMedal = medalFor(level, best?.time);
+  const runMedal = medalFor(level, e.time);
+  const newMedal = runMedal && (!oldMedal || MEDALS.indexOf(runMedal) < MEDALS.indexOf(oldMedal));
   ui.finishTitle.textContent = `Level ${level.number} complete!`;
   ui.finishTime.textContent = formatTime(e.time);
   if (isRecord) {
@@ -257,6 +292,15 @@ function finishLevel(e) {
     ui.finishNote.textContent = `Best: ${formatTime(best.time)} (+${(e.time - best.time).toFixed(3)}s)`;
     ui.finishNote.className = '';
   }
+  const bestMedal = medalFor(level, best.time);
+  const next = nextMedal(level, best.time);
+  ui.finishMedal.innerHTML = runMedal
+    ? `${medalBadge(runMedal, true)}<div class="fm-text">${newMedal ? `New ${MEDAL_NAME[runMedal]} medal!` : `${MEDAL_NAME[runMedal]} time`}</div>`
+    : `<div class="fm-text dim">No medal this time</div>`;
+  ui.finishMedal.innerHTML += next
+    ? `<div class="fm-next">Next: ${medalBadge(next)} ${MEDAL_NAME[next]} at ${formatTime(level.medals[next])}</div>`
+    : bestMedal === 'gold' ? '<div class="fm-next">You have gold on this level!</div>' : '';
+  if (newMedal) sound.medal(runMedal);
   const hasNext = level.index + 1 < LEVELS.length;
   if (hasNext && progress.unlocked < level.index + 2) {
     progress.unlocked = level.index + 2;
@@ -468,5 +512,5 @@ window.__skyhook = {
   get tutorial() { return tut; },
   get state() { return state; },
   get lastRelease() { return lastRelease; },
-  renderer, restart, loadLevel, loadTutorial, formatTime, TUNING,
+  renderer, restart, loadLevel, loadTutorial, formatTime, TUNING, medalCounts,
 };
