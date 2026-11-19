@@ -1,4 +1,5 @@
 import { insideBox, updateMovers } from './course.js';
+import { updateHazards, resetHazards } from './hazards.js';
 import { createPlayer, resetPlayer, step, fireHook, releaseHook, FIXED_DT, TUNING } from './physics.js';
 
 // One attempt at a course: the timer, checkpoints, finish and respawning.
@@ -6,6 +7,7 @@ import { createPlayer, resetPlayer, step, fireHook, releaseHook, FIXED_DT, TUNIN
 
 export function createRun(course) {
   updateMovers(course, 0);
+  resetHazards(course);
   return {
     course,
     player: createPlayer(course.spawn),
@@ -19,6 +21,7 @@ export function createRun(course) {
 
 export function restartRun(run) {
   updateMovers(run.course, 0);
+  resetHazards(run.course);
   resetPlayer(run.player, run.course.spawn);
   run.started = false;
   run.finished = false;
@@ -35,6 +38,7 @@ export function respawn(run) {
     run.started = false;
     run.time = 0;
   }
+  resetHazards(run.course); // crumbled anchors come back
 }
 
 export function hook(run, dir) {
@@ -54,6 +58,8 @@ export function tick(run, input, dt = FIXED_DT) {
 
   // Moving anchors follow the run clock (they wait while you're on the start).
   updateMovers(course, run.time);
+  const hz = run.finished ? {} : updateHazards(course, dt, p, run.time);
+  if (hz.dropped) events.push({ type: 'crumble' });
   const stepEvents = step(p, run.finished ? { forward: 0, right: 0 } : input, course, dt);
   if (stepEvents.landed > 4) events.push({ type: 'land', speed: stepEvents.landed });
   if (stepEvents.jumped) events.push({ type: 'jump' });
@@ -83,10 +89,11 @@ export function tick(run, input, dt = FIXED_DT) {
     run.finished = true;
     releaseHook(p);
     events.push({ type: 'finish', time: run.time });
-  } else if (p.pos.y < course.killY) {
+  } else if (p.pos.y < course.killY || hz.zapped) {
     run.falls++;
     respawn(run);
-    events.push({ type: 'fall' });
+    events.push({ type: hz.zapped ? 'zap' : 'fall' });
+    if (hz.zapped) events.push({ type: 'fall' });
   }
 
   return events;

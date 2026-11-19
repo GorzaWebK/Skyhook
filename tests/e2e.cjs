@@ -48,7 +48,7 @@ async function waitForServer() {
     await page.click('#levels-btn');
     check(await page.isVisible('#screen-levels'), 'Levels button opens level select');
     const tiles = await page.$$eval('.level-tile', (els) => els.map((e) => ({ locked: e.disabled, text: e.textContent })));
-    check(tiles.length === 30, `level select shows 30 levels (${tiles.length})`);
+    check(tiles.length === 40, `level select shows 40 levels (${tiles.length})`);
     check(!tiles[0].locked && tiles.slice(1).every((t) => t.locked), 'only level 1 is unlocked at first');
     await page.click('#screen-levels [data-back]');
 
@@ -204,7 +204,7 @@ async function waitForServer() {
     check(await page.isVisible('#screen-profile') && lifetime.hooksFired >= 1 && lifetime.jumps >= 1 && lifetime.falls >= 1 && lifetime.distance > 5 && statText.includes('Hooks fired'),
       `Profile shows your stats (hooks ${lifetime.hooksFired}, jumps ${lifetime.jumps}, falls ${lifetime.falls}, ${Math.round(lifetime.distance)} m)`);
     await page.click('#tab-ach');
-    check(await page.isVisible('#ach-grid') && (await page.$$('.ach')).length === 30 && (await page.textContent('#ach-summary')).includes('/ 30 unlocked'), 'Profile shows all 30 achievements');
+    check(await page.isVisible('#ach-grid') && (await page.$$('.ach')).length === 31 && (await page.textContent('#ach-summary')).includes('/ 31 unlocked'), 'Profile shows all 31 achievements');
     check((await page.$$('.ach.done')).length >= 1 && (await page.$$('.ach-bar')).length >= 1, 'earned achievements are highlighted and others show progress');
     await page.screenshot({ path: 'test-results/achievements.png' });
     await page.click('#screen-profile [data-back]');
@@ -445,6 +445,11 @@ async function waitForServer() {
     await page.mouse.down(); await page.mouse.up();
     await page.waitForTimeout(300);
     check((await blocks()) === 1 && await g(() => window.__skyhook.customLevel.data.blocks[0][0] === 'a'), 'left click places an anchor where you aim');
+    await page.keyboard.press('Digit6');
+    const t6 = await page.textContent('.ep-tool.on');
+    await page.keyboard.press('Digit0');
+    const t0 = await page.textContent('.ep-tool.on');
+    check(t6.includes('Crumbling anchor') && t0.includes('Zip-line') && (await page.$$('.ep-tool')).length === 10, 'the editor has the 5 new block types on keys 6-0');
     await page.keyboard.press('Digit3');
     const size0 = await page.textContent('#ep-size');
     await page.mouse.wheel(0, 100);
@@ -598,6 +603,22 @@ async function waitForServer() {
     await page.waitForTimeout(1500);
     const moved = await g((b) => window.__skyhook.renderer.movers.some((m, i) => Math.hypot(...m.mesh.position.toArray().map((v, k) => v - b[i][k])) > 0.3), before);
     check(movers > 5 && moved, `level 30 has moving anchors (${movers}) and they move once the timer starts`);
+
+    // Storm level 35: crumbling anchors, wind, lasers and zip-lines are drawn.
+    await page.goto(`${URL}?unlock=all&level=35`);
+    await page.waitForTimeout(1200);
+    await page.click('#play-btn');
+    await page.waitForTimeout(800);
+    const storm = await g(() => {
+      const r = window.__skyhook.renderer;
+      return { theme: r.themeId, winds: r.windFx.length, lasers: r.laserFx.length, crumble: r.movers.filter((m) => m.box.crumble).length, zips: window.__skyhook.course.boxes.filter((b) => b.kind === 'zip').length };
+    });
+    check(storm.theme === 'storm' && storm.winds > 0 && storm.lasers > 0 && storm.crumble > 0 && storm.zips > 0, `storm level 35 has its special blocks (${JSON.stringify(storm)})`);
+    await g(() => { const p = window.__skyhook.run.player; p.pitch = 0.15; });
+    await page.waitForTimeout(500);
+    await page.screenshot({ path: 'test-results/storm-level.png' });
+    await g(() => document.exitPointerLock());
+    await page.waitForTimeout(300);
 
     // Arm + grapple gun are drawn; rope starts at the gun's muzzle.
     await page.goto(`${URL}?level=1`);

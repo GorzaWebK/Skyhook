@@ -153,8 +153,8 @@ test('falling into the clouds respawns the player', () => {
   assert.ok(run.player.pos.distanceTo(course.spawn.pos) < 0.01);
 });
 
-test('there are 30 levels and they get harder', () => {
-  assert.equal(LEVELS.length, 30);
+test('there are 40 levels and they get harder', () => {
+  assert.equal(LEVELS.length, 40);
   const first = levelParams(0);
   const last = levelParams(1);
   assert.ok(last.anchorCount > first.anchorCount, 'more anchors');
@@ -162,7 +162,8 @@ test('there are 30 levels and they get harder', () => {
   assert.ok(last.sizeMax < first.sizeMin, 'smaller anchors');
   assert.equal(first.blockerChance, 0, 'no blockers early');
   const anchors = LEVELS.map((l) => buildLevel(l).anchors.length);
-  for (let i = 1; i < anchors.length; i++) assert.ok(anchors[i] >= anchors[i - 1], `level ${i + 1} not shorter than level ${i}`);
+  for (let i = 1; i < 30; i++) assert.ok(anchors[i] >= anchors[i - 1], `level ${i + 1} not shorter than level ${i}`);
+  for (let i = 31; i < 40; i++) assert.ok(anchors[i] >= anchors[i - 1], `storm level ${i + 1} not shorter than level ${i}`);
   const blockers = buildLevel(LEVELS[29]).boxes.filter((b) => b.kind === 'blocker').length;
   assert.ok(blockers > 5, `level 30 has smooth blocks (${blockers})`);
 });
@@ -261,7 +262,7 @@ test('gun skins unlock from progress', () => {
   const some = { ...none, medals: { gold: 0, silver: 5, bronze: 5 } };
   assert.ok(unlocked(some).includes('bronze') && unlocked(some).includes('cobalt'));
   assert.ok(!unlocked(some).includes('crimson'));
-  const all = { medals: { gold: 30, silver: 30, bronze: 30 }, tutorialDone: true, editorFinished: true, achieved: { 'week-warrior': 1, ghostbuster: 1, 'km-10': 1, 'world-record': 1 } };
+  const all = { medals: { gold: 40, silver: 40, bronze: 40 }, tutorialDone: true, editorFinished: true, achieved: { 'week-warrior': 1, ghostbuster: 1, 'km-10': 1, 'world-record': 1 } };
   assert.equal(unlocked(all).length, SKINS.length);
   assert.equal(skinRequirement(SKINS.find((sk) => sk.id === 'gilded'), some), 'Earn 10 gold medals (0 / 10)');
   assert.equal(new Set(SKINS.map((sk) => sk.id)).size, SKINS.length, 'unique ids');
@@ -317,7 +318,7 @@ test('bad level codes are rejected with a clear reason', async () => {
   await assert.rejects(decodeLevel('hello'), /doesn't look like a Skyhook level code/);
   await assert.rejects(decodeLevel('SKY1.AAAA'), /damaged or incomplete/);
   const bad = (blocks, extra = {}) => validateLevel({ v: 1, name: 'x', blocks, ...extra });
-  assert.throws(() => bad([['z', 0, 0, 0, 1, 1, 1]]), /unknown type/);
+  assert.throws(() => bad([['q', 0, 0, 0, 1, 1, 1]]), /unknown type/);
   assert.throws(() => bad([['a', 0, 0, 0, 1, 1]]), /malformed/);
   assert.throws(() => bad([['a', 9999, 0, 0, 1, 1, 1]]), /too far/);
   assert.throws(() => bad([['a', 0, 0, 0, 500, 1, 1]]), /bad size/);
@@ -525,9 +526,9 @@ test('stats: distance, swing distance, top speed and longest swing; respawns are
 import { ACHIEVEMENTS, newAchievements } from '../src/achievements.js';
 import { defaultStats } from '../src/stats.js';
 
-test('achievements: 30 unique, and they unlock from the right situations', () => {
-  assert.equal(ACHIEVEMENTS.length, 30);
-  assert.equal(new Set(ACHIEVEMENTS.map((a) => a.id)).size, 30);
+test('achievements: 31 unique, and they unlock from the right situations', () => {
+  assert.equal(ACHIEVEMENTS.length, 31);
+  assert.equal(new Set(ACHIEVEMENTS.map((a) => a.id)).size, 31);
   const base = { stats: defaultStats(), medals: { gold: 0, silver: 0, bronze: 0 }, progress: {}, finished: new Set(), run: null, flags: {} };
   assert.deepEqual(newAchievements(base, {}), [], 'nothing for a brand new player');
   const ids = (c) => newAchievements(c, {}).map((a) => a.id);
@@ -556,4 +557,75 @@ test('rope colours and hook trails unlock from achievements that exist', () => {
   assert.deepEqual(TRAILS.filter((t) => isCosmeticUnlocked(t, {})).map((t) => t.id), ['none']);
   assert.ok(isCosmeticUnlocked(ROPES.find((r) => r.id === 'gold'), { 'gold-10': '2026-11-19' }));
   assert.equal(SKINS.length, 13);
+});
+
+// --- Storm levels and special blocks ---------------------------------------------------
+import { updateHazards, resetHazards, CRUMBLE_DELAY, laserOn } from '../src/hazards.js';
+
+test('storm levels 31-40 have crumbling anchors, wind, lasers and zip-lines', () => {
+  let crumble = 0, winds = 0, lasers = 0, zips = 0;
+  for (let n = 31; n <= 40; n++) {
+    const c = buildLevel(LEVELS[n - 1]);
+    assert.equal(c.theme, 'storm');
+    crumble += c.anchors.filter((a) => a.crumble).length;
+    winds += c.winds.length;
+    lasers += c.lasers.length;
+    zips += c.boxes.filter((b) => b.kind === 'zip').length;
+  }
+  assert.ok(crumble >= 10 && winds >= 10 && lasers >= 5 && zips >= 5, JSON.stringify({ crumble, winds, lasers, zips }));
+  for (let n = 1; n <= 30; n++) {
+    const c = buildLevel(LEVELS[n - 1]);
+    assert.ok(!c.winds?.length && !c.lasers?.length && !c.anchors.some((a) => a.crumble), `level ${n} has no storm blocks`);
+  }
+});
+
+test('a crumbling anchor drops your rope after a moment, and comes back on restart', () => {
+  const course = buildLevel(LEVELS[39]);
+  const a = course.anchors.find((x) => x.crumble && !x.motion) || course.anchors.find((x) => x.crumble);
+  const run = createRun(course);
+  const p = run.player;
+  p.pos.set(a.center.x, a.center.y - 12, a.center.z + 4);
+  const eye = p.pos.clone().add(new Vector3(0, TUNING.eyeHeight, 0));
+  assert.ok(tryHook(p, course, a.center.clone().sub(eye).normalize()), 'hooked');
+  const home = a.center.clone();
+  let dropped = false;
+  for (let i = 0; i < 120 * (CRUMBLE_DELAY + 0.5) && !dropped; i++) dropped = updateHazards(course, 1 / 120, p, 0).dropped;
+  assert.ok(dropped && p.hook === null, 'rope dropped');
+  for (let i = 0; i < 240; i++) updateHazards(course, 1 / 120, p, 0);
+  assert.ok(a.center.y < home.y - 10, 'anchor fell');
+  resetHazards(course);
+  assert.ok(a.center.distanceTo(home) < 1e-9 && a.crumble.t === null, 'back in place');
+});
+
+test('wind pushes you, lasers send you back, zip-lines carry you', () => {
+  const course = buildLevel(LEVELS[39]);
+  // Wind
+  const w = course.winds[0];
+  const p = createPlayer(course.spawn);
+  p.pos.copy(w.center);
+  p.vel.set(0, 0, 0);
+  step(p, idle, course);
+  const pushed = p.vel.clone().setY(p.vel.y + TUNING.gravity / 120); // remove gravity's share
+  assert.ok(pushed.dot(w.force) > 0, 'pushed along the wind');
+  // Laser: on and off over its period, and touching it while on sends you back
+  const l = course.lasers[0];
+  let onAt = null;
+  for (let t = 0; t < l.period && onAt === null; t += 0.05) if (laserOn(l, t)) onAt = t;
+  assert.ok(onAt !== null && [0, 0.25, 0.5, 0.75].some((f) => !laserOn(l, onAt + l.period * f)), 'switches on and off');
+  const run = createRun(course);
+  run.started = true;
+  run.time = onAt;
+  run.player.pos.copy(l.center);
+  const ev = tick(run, idle);
+  assert.ok(ev.some((e) => e.type === 'zap') && run.falls === 1, 'zapped back');
+  // Zip-line
+  const zip = course.boxes.find((b) => b.kind === 'zip');
+  const q = createPlayer(course.spawn);
+  q.pos.set(zip.center.x, zip.center.y - 6, zip.max.z - 1);
+  const eye = q.pos.clone().add(new Vector3(0, TUNING.eyeHeight, 0));
+  const target = new Vector3(zip.center.x, zip.center.y, zip.max.z - 1.5);
+  assert.ok(tryHook(q, course, target.sub(eye).normalize()), 'hooked the rail');
+  const z0 = q.hook.point.z;
+  for (let i = 0; i < 60; i++) step(q, idle, course);
+  assert.ok(q.hook.point.z < z0 - 5 && q.pos.z < zip.max.z - 3, 'hook slides along the rail and pulls you');
 });

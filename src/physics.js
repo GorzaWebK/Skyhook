@@ -1,5 +1,6 @@
 import { Vector3 } from 'three';
 import { isHookable } from './course.js';
+import { windForce, ZIP_SPEED } from './hazards.js';
 
 // All the movement feel lives in these numbers.
 export const TUNING = {
@@ -84,6 +85,7 @@ function rayBox(o, d, b, maxDist) {
 export function raycast(course, origin, dir, maxDist = TUNING.hookRange) {
   let best = null;
   for (const b of course.boxes) {
+    if (b.gone) continue;
     const t = rayBox(origin, dir, b, maxDist);
     if (t >= 0 && (!best || t < best.distance)) best = { distance: t, box: b };
   }
@@ -149,6 +151,7 @@ const _fwd = new Vector3();
 const _right = new Vector3();
 const _wish = new Vector3();
 const _n = new Vector3();
+const _wind = new Vector3();
 
 // input: { forward: -1..1, right: -1..1, jump: bool, reel: bool }
 // Returns events from this step (e.g. landing impact speed).
@@ -191,6 +194,8 @@ export function step(player, input, course, dt = FIXED_DT) {
 
   player.vel.y -= t.gravity * dt;
   player.vel.multiplyScalar(1 - t.drag * dt);
+  // Wind zones push you while you're inside them.
+  if (course.winds?.length) player.vel.addScaledVector(windForce(course, player.pos, _wind), dt);
 
   // A fired hook travels towards its target and catches when it arrives.
   if (player.pending) {
@@ -205,8 +210,21 @@ export function step(player, input, course, dt = FIXED_DT) {
   // A hook in a moving anchor rides along with it.
   if (player.hook?.box?.motion) player.hook.point.copy(player.hook.box.center).add(player.hook.local);
 
+  // On a zip-line the hook slides forward along the rail and the rope pulls
+  // in to a short length, carrying you along.
+  let zipping = false;
+  if (player.hook?.box?.kind === 'zip') {
+    const rail = player.hook.box;
+    const hp = player.hook.point;
+    hp.x = rail.center.x;
+    hp.y = rail.min.y;
+    hp.z = Math.max(rail.min.z + 0.25, hp.z - ZIP_SPEED * dt);
+    player.hook.length = Math.max(4, player.hook.length - t.reelSpeed * dt);
+    zipping = player.hook.length > 4;
+  }
+
   // The rope keeps the length it had when it caught, unless you reel in.
-  let reeling = false;
+  let reeling = zipping;
   if (player.hook) {
     player.hook.time += dt;
     if (input.reel) {
@@ -248,6 +266,7 @@ function collide(player, course) {
   const r = TUNING.radius;
   const p = player.pos;
   for (const b of course.boxes) {
+    if (b.gone) continue;
     // Cheap reject.
     if (p.x < b.min.x - r || p.x > b.max.x + r ||
         p.y < b.min.y - r || p.y > b.max.y + r ||

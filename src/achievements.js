@@ -24,13 +24,14 @@ export const ACHIEVEMENTS = [
   { id: 'daylight', icon: '☀️', name: 'Daylight', desc: 'Finish all daytime levels (1–10).', check: (c) => finishedRange(c, 1, 10) === 10, progress: (c) => [finishedRange(c, 1, 10), 10] },
   { id: 'golden-hour', icon: '🌇', name: 'Golden Hour', desc: 'Finish all sunset levels (11–20).', check: (c) => finishedRange(c, 11, 20) === 10, progress: (c) => [finishedRange(c, 11, 20), 10] },
   { id: 'night-owl', icon: '🌙', name: 'Night Owl', desc: 'Finish all night levels (21–30).', check: (c) => finishedRange(c, 21, 30) === 10, progress: (c) => [finishedRange(c, 21, 30), 10] },
+  { id: 'storm-chaser', icon: '⛈️', name: 'Storm Chaser', desc: 'Finish all storm levels (31–40).', check: (c) => finishedRange(c, 31, 40) === 10, progress: (c) => [finishedRange(c, 31, 40), 10] },
   { id: 'moving-target', icon: '🎯', name: 'Moving Target', desc: 'Finish a level with moving anchors (level 16 or later).', check: (c) => run(c, (r) => r.levelNumber >= 16) },
   // Medals
   { id: 'gold-rush', icon: '🥇', name: 'Gold Rush', desc: 'Win your first gold medal.', check: (c) => c.medals.gold >= 1 },
   { id: 'bronze-10', icon: '🥉', name: 'Collector', desc: 'Win 10 medals.', check: (c) => c.medals.bronze >= 10, progress: (c) => [c.medals.bronze, 10] },
   { id: 'silver-10', icon: '🥈', name: 'Silver Lining', desc: 'Win 10 silver-or-better medals.', check: (c) => c.medals.silver >= 10, progress: (c) => [c.medals.silver, 10] },
   { id: 'gold-10', icon: '👑', name: 'Midas', desc: 'Win 10 gold medals.', check: (c) => c.medals.gold >= 10, progress: (c) => [c.medals.gold, 10] },
-  { id: 'gold-all', icon: '💎', name: 'Perfectionist', desc: 'Win gold on all 30 levels.', check: (c) => c.medals.gold >= 30, progress: (c) => [c.medals.gold, 30] },
+  { id: 'gold-all', icon: '💎', name: 'Perfectionist', desc: 'Win gold on all 40 levels.', check: (c) => c.medals.gold >= 40, progress: (c) => [c.medals.gold, 40] },
   // Skill
   { id: 'sure-footed', icon: '🦶', name: 'Sure-Footed', desc: 'Finish level 5 or later without falling or going back to a checkpoint.', check: (c) => run(c, (r) => r.levelNumber >= 5 && r.falls === 0 && r.retries === 0) },
   { id: 'hands-off', icon: '🙌', name: 'Hands Off', desc: 'Finish level 3 or later without reeling in.', check: (c) => run(c, (r) => r.levelNumber >= 3 && !r.reeled) },

@@ -455,7 +455,7 @@ function updateEditorPanel() {
   if (!customLevel) return;
   ui.epName.textContent = customLevel.data.name;
   ui.epTools.innerHTML = TOOLS.map((t, i) =>
-    `<div class="ep-tool${i === editor.tool ? ' on' : ''}"><i style="background:${t.color}"></i><kbd>${i + 1}</kbd> ${t.name}</div>`).join('');
+    `<div class="ep-tool${i === editor.tool ? ' on' : ''}"><i style="background:${t.color}"></i><kbd>${(i + 1) % 10}</kbd> ${t.name}</div>`).join('');
   const sz = editor.size();
   ui.epSize.textContent = `${sz[0]} × ${sz[1]} × ${sz[2]}`;
   const sum = editorSummary(customLevel);
@@ -1200,6 +1200,13 @@ function handleEvents(events) {
         renderer.addShake(0.15);
         renderer.ropeSnap();
         break;
+      case 'crumble':
+        sound.crumble();
+        showToast('It crumbled!', '#c99bff');
+        break;
+      case 'zap':
+        sound.zap();
+        break;
       case 'jump':
         stats.add('jumps');
         sound.jump();
@@ -1266,8 +1273,8 @@ input.handlers.wheel = (dir) => {
 };
 
 function editorKey(code) {
-  const digit = /^Digit([1-5])$/.exec(code);
-  if (digit) editor.setTool(Number(digit[1]) - 1);
+  const digit = /^Digit([0-9])$/.exec(code);
+  if (digit) editor.setTool((Number(digit[1]) + 9) % 10); // 1-9, then 0 for the 10th tool
   if (code === 'BracketRight') editor.cycleSize(1);
   if (code === 'BracketLeft') editor.cycleSize(-1);
   if (code === 'KeyR') editor.rotate();
@@ -1589,6 +1596,7 @@ function frame(now) {
   if (splitTimer > 0 && (splitTimer -= dt) <= 0) ui.split.classList.remove('show');
 
   if (state !== 'replay') renderer.updateGhosts(run.time);
+  renderer.courseTime = state === 'replay' ? replay.t : run.time;
   if (!bot && state === 'playing') move = input.movement();
   renderer.render(p, target && isHookable(target.box) ? target : null, dt, {
     mouseDX: mx, mouseDY: my, right: move.right, reeling: move.reel,

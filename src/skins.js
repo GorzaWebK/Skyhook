@@ -16,7 +16,7 @@ export const SKINS = [
   { id: 'spectre', name: 'Spectre', colors: { body: '#cfe8ee', dark: '#38515a', accent: '#ffffff', glow: '#8ff7ff' }, req: { type: 'achievement', id: 'ghostbuster' } },
   { id: 'voyager', name: 'Voyager', colors: { body: '#2f6b5a', dark: '#14261f', accent: '#f2d27a', glow: '#62ffc8' }, req: { type: 'achievement', id: 'km-10' } },
   { id: 'champion', name: 'Champion', colors: { body: '#1a1a1f', dark: '#0b0b0d', accent: '#ffc928', glow: '#ffc928' }, req: { type: 'achievement', id: 'world-record' } },
-  { id: 'phantom', name: 'Phantom Chrome', colors: { body: '#d3dbe6', dark: '#11141a', accent: '#c78bff', glow: '#c78bff' }, req: { type: 'medals', tier: 'gold', count: 30 } },
+  { id: 'phantom', name: 'Phantom Chrome', colors: { body: '#d3dbe6', dark: '#11141a', accent: '#c78bff', glow: '#c78bff' }, req: { type: 'medals', tier: 'gold', count: 40 } },
 ];
 
 const TIER_WORD = { bronze: 'medals', silver: 'silver or better medals', gold: 'gold medals' };

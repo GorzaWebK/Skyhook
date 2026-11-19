@@ -7,6 +7,7 @@ import { THEMES } from './themes.js';
 import { Sparks, Rain, makeSpeedLines, HookTrail } from './effects.js';
 import { faceNormal } from './editor.js';
 import { ghostAt } from './ghost.js';
+import { laserOn, CRUMBLE_DELAY } from './hazards.js';
 
 const SKY_TOP = new THREE.Color('#3b7bd4');
 const SKY_HORIZON = new THREE.Color('#bfdcf2');
@@ -18,6 +19,8 @@ const KIND_STYLE = {
   finish: { color: '#ffd36b', tile: 4, emissive: '#5a4210' },
   pillar: { color: '#a9b3c7', tile: 8 },
   blocker: { color: '#3a4150', tile: 3, metal: true },
+  crumble: { color: '#b46bff', tile: 2.5, stripes: true, emissive: '#7a2bff', emissiveIntensity: 0.5 },
+  zip: { color: '#d9dee8', tile: 1, metal: true, emissive: '#ffd36b', emissiveIntensity: 0.25 },
   moving: { color: '#ffc43d', tile: 2.5, stripes: true, emissive: '#ffae00', emissiveIntensity: 0.55 },
   anchor: { color: '#ff9a4d', tile: 2.5, stripes: true, emissive: '#ff5a10', emissiveIntensity: 0.45 },
 };
@@ -383,13 +386,49 @@ export class Renderer {
     }
     this.movers = [];
     for (const b of course.boxes) {
-      const kind = b.motion ? 'moving' : b.kind; // moving anchors are amber
+      const kind = b.crumble ? 'crumble' : b.motion ? 'moving' : b.kind; // moving anchors amber, crumbling purple
       const style = KIND_STYLE[kind];
       const mesh = new THREE.Mesh(boxGeometry(b.size, style.tile), materials[kind]);
       mesh.position.copy(b.center);
       this.courseGroup.add(mesh);
-      if (b.motion) this.movers.push({ box: b, mesh });
+      if (b.motion || b.crumble) this.movers.push({ box: b, mesh });
     }
+
+    // Wind zones: see-through boxes with streaks flowing along the wind.
+    this.windFx = (course.winds || []).map((w) => {
+      const dir = w.force.clone().normalize();
+      const mat = new THREE.ShaderMaterial({
+        transparent: true, depthWrite: false, side: THREE.DoubleSide,
+        uniforms: { time: { value: 0 }, dir: { value: dir }, color: { value: new THREE.Color(w.force.y > 0 ? '#c8ffef' : '#9fd8ff') } },
+        vertexShader: `
+          varying vec3 vPos;
+          void main() { vPos = (modelMatrix * vec4(position, 1.0)).xyz; gl_Position = projectionMatrix * viewMatrix * vec4(vPos, 1.0); }`,
+        fragmentShader: `
+          uniform float time; uniform vec3 dir; uniform vec3 color;
+          varying vec3 vPos;
+          void main() {
+            float along = dot(vPos, dir);
+            vec3 side = vPos - dir * along;
+            float lane = fract(dot(side, vec3(0.37, 0.53, 0.29)) * 0.6);
+            float streak = smoothstep(0.85, 1.0, fract(along * 0.12 - time * 1.4 + lane * 3.0)) * step(0.55, lane);
+            gl_FragColor = vec4(color, 0.06 + streak * 0.45);
+          }`,
+      });
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(w.size.x, w.size.y, w.size.z), mat);
+      mesh.position.copy(w.center);
+      this.courseGroup.add(mesh);
+      return mesh;
+    });
+    // Laser gates: bright red when on, faint when off.
+    this.laserFx = (course.lasers || []).map((l) => {
+      const mesh = new THREE.Mesh(
+        new THREE.BoxGeometry(l.size.x, l.size.y, l.size.z),
+        new THREE.MeshBasicMaterial({ color: '#ff3b3b', transparent: true, opacity: 0.8, depthWrite: false, toneMapped: false })
+      );
+      mesh.position.copy(l.center);
+      this.courseGroup.add(mesh);
+      return { l, mesh };
+    });
 
     this.checkpointFx = course.checkpoints.map((cp) => {
       const beam = makeBeam(cp.trigger, '#5ff0ff');
@@ -552,7 +591,22 @@ export class Renderer {
     }
 
     // Moving anchors: meshes follow the physics boxes.
-    for (const m of this.movers || []) m.mesh.position.copy(m.box.center);
+    for (const m of this.movers || []) {
+      m.mesh.position.copy(m.box.center);
+      const c = m.box.crumble;
+      if (c && c.t !== null && c.t < CRUMBLE_DELAY) { // shake before it falls
+        const s = 0.06 + 0.12 * (c.t / CRUMBLE_DELAY);
+        m.mesh.position.x += (Math.random() - 0.5) * s;
+        m.mesh.position.y += (Math.random() - 0.5) * s;
+      }
+      m.mesh.visible = !m.box.gone;
+    }
+    const ct = this.courseTime || 0;
+    for (const w of this.windFx || []) w.material.uniforms.time.value = this.time;
+    for (const { l, mesh } of this.laserFx || []) {
+      const on = laserOn(l, ct);
+      mesh.material.opacity = on ? 0.55 + 0.25 * Math.sin(this.time * 30) : 0.08;
+    }
 
     // Effects.
     this.sparks.update(dt);

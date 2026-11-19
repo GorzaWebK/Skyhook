@@ -10,6 +10,11 @@ export const TOOLS = [
   { key: 'p', name: 'Platform', color: '#c9ccd2', sizes: [[10, 1.5, 10], [6, 1.5, 6], [16, 2, 16], [4, 1, 20]] },
   { key: 'c', name: 'Checkpoint', color: '#8fe3e8', sizes: [[11, 1.5, 11], [8, 1.5, 8]] },
   { key: 'f', name: 'Finish', color: '#ffd36b', sizes: [[18, 2, 18], [12, 2, 12]] },
+  { key: 'k', name: 'Crumbling anchor', color: '#b46bff', sizes: [[4, 4, 4], [5, 5, 5], [3, 3, 3]] },
+  { key: 'w', name: 'Wind (R: direction)', color: '#9fd8ff', sizes: [[20, 30, 20], [14, 20, 14], [30, 40, 24]] },
+  { key: 'u', name: 'Updraft', color: '#c8ffef', sizes: [[14, 30, 14], [20, 40, 20]] },
+  { key: 'l', name: 'Laser gate', color: '#ff3b3b', sizes: [[24, 20, 0.8], [16, 30, 0.8], [0.8, 20, 24]] },
+  { key: 'z', name: 'Zip-line', color: '#d9dee8', sizes: [[0.5, 0.5, 30], [0.5, 0.5, 20], [0.5, 0.5, 45]] },
 ];
 
 export const EDITOR_RANGE = 150;
@@ -117,8 +122,10 @@ export class Editor {
   aim(player) {
     const eye = eyePosition(player);
     const dir = aimDirection(player.yaw, player.pitch);
-    const hit = raycast(this.course, eye, dir, EDITOR_RANGE);
-    const blockIndex = hit ? this.course.boxes.indexOf(hit.box) - 1 : -1; // box 0 is the start platform
+    // Wind and laser volumes aren't solid, but you can still aim at them here.
+    const all = { boxes: [...this.course.boxes, ...(this.course.winds || []), ...(this.course.lasers || [])] };
+    const hit = raycast(all, eye, dir, EDITOR_RANGE);
+    const blockIndex = hit?.box.dataIndex ?? -1; // the start platform has none
     const size = this.size();
     return { hit, blockIndex, size, center: placementCenter(hit, size, eye, dir) };
   }
@@ -158,7 +165,8 @@ export class Editor {
     const key = TOOLS[this.tool].key;
     this.pushUndo();
     if (key === 'f') this.level.data.blocks = this.blocks.filter((b) => b[0] !== 'f'); // only one finish
-    this.blocks.push([key, a.center.x, a.center.y, a.center.z, ...a.size]);
+    const k = key === 'w' && this.rotated ? 'W' : key; // R flips the wind's direction
+    this.blocks.push([k, a.center.x, a.center.y, a.center.z, ...a.size]);
     this.rebuild();
     return true;
   }
@@ -177,7 +185,7 @@ export class Editor {
     const a = this.aim(player);
     if (a.blockIndex < 0) return false;
     const [k, , , , sx, sy, sz] = this.blocks[a.blockIndex];
-    this.tool = TOOLS.findIndex((t) => t.key === k);
+    this.tool = TOOLS.findIndex((t) => t.key === (k === 'W' ? 'w' : k));
     this.rotated = false;
     this.customSize = [sx, sy, sz];
     this.onChange?.();

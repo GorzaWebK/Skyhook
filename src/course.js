@@ -1,5 +1,6 @@
 import { Vector3 } from 'three';
 import { mulberry32, range } from './rng.js';
+import { decorateStorm, makeWind, makeLaser } from './hazards.js';
 
 // A course is plain data: a list of axis-aligned boxes plus the start,
 // checkpoints and finish.
@@ -195,7 +196,10 @@ export function buildTutorialCourse() {
 // c = checkpoint (in the order placed), f = finish (at most one).
 // The start platform at the origin is always there and isn't stored.
 
-export const CUSTOM_KINDS = { a: 'anchor', b: 'blocker', p: 'platform', c: 'checkpoint', f: 'finish' };
+export const CUSTOM_KINDS = {
+  a: 'anchor', b: 'blocker', p: 'platform', c: 'checkpoint', f: 'finish',
+  k: 'crumble', w: 'wind', W: 'wind', u: 'wind', l: 'laser', z: 'zip',
+};
 
 export function buildCustomCourse(data) {
   const boxes = [];
@@ -205,14 +209,32 @@ export function buildCustomCourse(data) {
   let finish = null;
   let lowest = 0;
 
+  const winds = [];
+  const lasers = [];
+  let dataIndex = -1;
   for (const [k, x, y, z, sx, sy, sz] of data.blocks) {
+    dataIndex++;
     const kind = CUSTOM_KINDS[k];
     if (!kind) continue;
-    const b = box(new Vector3(x, y, z), new Vector3(sx, sy, sz), kind);
+    const c = new Vector3(x, y, z);
+    const sz3 = new Vector3(sx, sy, sz);
+    // Wind and lasers are volumes, not solid blocks.
+    if (kind === 'wind') {
+      const force = k === 'u' ? new Vector3(0, 16, 0) : new Vector3(k === 'W' ? -13 : 13, 0, 0);
+      winds.push({ ...makeWind(c, sz3, force), dataIndex });
+      continue;
+    }
+    if (kind === 'laser') {
+      lasers.push({ ...makeLaser(c, sz3, 2.8, 0.5, 0), dataIndex });
+      continue;
+    }
+    const b = box(c, sz3, kind === 'crumble' ? 'anchor' : kind);
+    if (kind === 'crumble') b.crumble = { t: null, fallV: 0, home: c.clone() };
     boxes.push(b);
     lowest = Math.min(lowest, b.min.y);
     const top = b.max.y;
-    if (kind === 'anchor') anchors.push(b);
+    b.dataIndex = dataIndex;
+    if (kind === 'anchor' || kind === 'crumble') anchors.push(b);
     if (kind === 'checkpoint') {
       const w = Math.max(sx, 14);
       const d = Math.max(sz, 14);
@@ -232,7 +254,7 @@ export function buildCustomCourse(data) {
   }
 
   return {
-    seed: 0, boxes, anchors, checkpoints, finish, spawn, startZone,
+    seed: 0, boxes, anchors, checkpoints, finish, spawn, startZone, winds, lasers,
     killY: Math.min(-45, lowest - 25),
     custom: true,
     theme: data.theme || 'day',
@@ -243,13 +265,23 @@ export function buildCustomCourse(data) {
 export function updateMovers(course, t) {
   for (const b of course.boxes) {
     const m = b.motion;
-    if (!m) continue;
+    if (!m || (b.crumble && b.crumble.t !== null && b.crumble.t >= 1.1)) continue; // a falling anchor stops moving
     const offset = m.amp * Math.sin((t / m.period) * Math.PI * 2 + m.phase);
     b.center.copy(b.base);
     b.center[m.axis] += offset;
     b.min.set(b.center.x - b.size.x / 2, b.center.y - b.size.y / 2, b.center.z - b.size.z / 2);
     b.max.set(b.center.x + b.size.x / 2, b.center.y + b.size.y / 2, b.center.z + b.size.z / 2);
   }
+}
+
+// Storm levels (31-40): a hard layout from the main generator, with
+// crumbling anchors, wind, laser gates and zip-lines added on top.
+export function generateStormLevel(n, seed) {
+  const index = 15 + Math.round((n * 14) / 9); // difficulty of levels 16-30
+  const course = generateLevel(index, seed, 30);
+  decorateStorm(course, seed, n);
+  course.theme = 'storm';
+  return course;
 }
 
 export function insideBox(p, b) {

@@ -3,11 +3,12 @@
 // medals) to src/level-seeds.js.
 //   node scripts/find-seeds.mjs
 import { writeFileSync } from 'node:fs';
-import { generateLevel } from '../src/course.js';
+import { generateLevel, generateStormLevel } from '../src/course.js';
 import { botRun } from '../src/botrun.js';
 import { LEVEL_SEEDS as CURRENT } from '../src/level-seeds.js';
 
-const LEVEL_COUNT = 30;
+const LEVEL_COUNT = 40;
+const build = (i, seed) => (i < 30 ? generateLevel(i, seed, 30) : generateStormLevel(i - 30, seed));
 
 const seeds = [];
 const pars = [];
@@ -18,7 +19,7 @@ for (let i = 0; i < LEVEL_COUNT; i++) {
   const candidates = [CURRENT[i], ...Array.from({ length: 400 }, (_, k) => 1000 * (i + 1) + k)].filter((x) => x != null);
   for (let k = 0; k < candidates.length && !found; k++) {
     const seed = candidates[k];
-    const course = generateLevel(i, seed, LEVEL_COUNT);
+    const course = build(i, seed);
     const r = botRun(course);
     if (r.finished && r.falls === 0 && r.checkpoints.join() === course.checkpoints.map((c) => c.index).join()) {
       found = { seed, time: r.time, tries: k + 1, anchors: course.anchors.length, blockers: course.boxes.filter((b) => b.kind === 'blocker').length };

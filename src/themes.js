@@ -1,6 +1,6 @@
 // Sky themes: colours and lighting for the whole scene.
-// Levels 1-10 are Day, 11-20 Sunset, 21-30 Night. Storm is used for custom
-// levels (picked in the editor) and the daily challenge.
+// Levels 1-10 are Day, 11-20 Sunset, 21-30 Night, 31-40 Storm. Custom levels
+// pick one in the editor and the daily challenge rotates through all four.
 
 export const THEMES = {
   day: {
@@ -32,5 +32,5 @@ export const THEMES = {
 export const THEME_IDS = Object.keys(THEMES);
 
 export function themeForLevelIndex(index) {
-  return index < 10 ? 'day' : index < 20 ? 'sunset' : 'night';
+  return index < 10 ? 'day' : index < 20 ? 'sunset' : index < 30 ? 'night' : 'storm';
 }

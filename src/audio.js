@@ -184,6 +184,16 @@ export class Sound {
     [660, 880, 1320].forEach((f, i) => this.tone({ type: 'triangle', freq: f, dur: 0.3, gain: 0.14, delay: i * 0.08 }));
   }
 
+  crumble() {
+    this.burst({ freq: 300, q: 0.6, dur: 0.5, gain: 0.35, type: 'lowpass', sweepTo: 90 });
+    this.tone({ type: 'sawtooth', freq: 120, to: 50, dur: 0.4, gain: 0.08 });
+  }
+
+  zap() {
+    this.tone({ type: 'square', freq: 1400, to: 200, dur: 0.25, gain: 0.12 });
+    this.burst({ freq: 4000, q: 2, dur: 0.15, gain: 0.2 });
+  }
+
   thunder() {
     const d = 0.2 + Math.random() * 0.8;
     this.burst({ freq: 180, q: 0.5, dur: 2.6, gain: 0.5, type: 'lowpass', sweepTo: 60, delay: d });

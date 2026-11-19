@@ -33,13 +33,14 @@ The full controls list sits behind the **Controls** button on the main menu.
 - **Rope length:** The rope stays the length it was when it caught (up to the 55 m hook range) until you reel in.
 - **Release hop:** Letting go gives a small jump up and forward in the direction you're facing. If you're falling, it stops the fall, so you can rescue a run that was about to drop. You only get it if you held the rope for at least 0.25 s, so you can't spam it.
 - **Tutorial:** Open it from the **Tutorial** button on the main menu, which is highlighted until you've done it once. A prompt box takes you through ten steps on a gentle hand-built course: looking, moving, aiming, hooking, swinging, letting go, reeling in, checkpoints, smooth blocks and the finish. If you do a step early it still counts, and pressing **N** at the end starts Level 1.
-- **30 levels:** Open them from the **Levels** button. Each level unlocks when you finish the one before. They get harder as you go:
+- **40 levels:** Open them from the **Levels** button. Each level unlocks when you finish the one before. They get harder as you go:
   - more anchors (8 on level 1, 26 on level 30)
   - bigger gaps between anchors
   - smaller anchors
   - bigger zig-zags left, right, up and down
   - checkpoints further apart
   - from level 13, dark **smooth blocks** that your hook can't grab. They sit in your swing path and can block your aim.
+  - **levels 31–40 (storm)** add four special blocks: **crumbling anchors** (purple) that fall about a second after you hook them, **wind zones** that push you sideways or lift you up, **laser gates** (red) that switch on and off and send you back to your checkpoint, and **zip-lines** whose hook slides forward along the rail, pulling you with it. Levels 1–30 never use them.
   - from level 16, **moving anchors** (amber instead of orange) that slide sideways or bob up and down, with more of them on later levels. A hook stays stuck to the spot it bit, and the anchors only start moving when your timer starts, so every run gets the same timing.
 - **Medals:** Every level has gold, silver and bronze target times. Gold is the autopilot's own time, silver is 30% slower and bronze 75% slower. The HUD shows the next medal to aim for, the finish screen shows what you earned, and the level select shows your medal on each level plus your totals.
 - **Gun skins:** Nine colour styles for the grapple gun, picked from **Gun** on the main menu. The live gun stays visible next to the list, so you see the change straight away. They unlock with progress: Standard (free), Rookie Teal (finish the tutorial), Bronze Age (5 medals), Crimson (15 medals), Cobalt (5 silver-or-better), Toxic (15 silver-or-better), Architect (finish a level you built in the editor), Gilded (10 golds) and Phantom Chrome (gold on all 30 levels). The finish screen tells you when you've unlocked a new one.
@@ -50,7 +51,7 @@ The full controls list sits behind the **Controls** button on the main menu.
 - **Splits:** At each checkpoint you see how far ahead (green) or behind (red) your best run you are.
 - **Falling:** Drop into the clouds and you go back to your last checkpoint while the clock keeps running. Before the first checkpoint, the run starts over.
 - **Level editor:** Build your own courses from **Level editor** on the main menu.
-  - **Building:** Fly around freely (WASD, Space up, Shift down) and place blocks where you aim: **1** anchor, **2** smooth block, **3** platform, **4** checkpoint, **5** finish.
+  - **Building:** Fly around freely (WASD, Space up, Shift down) and place blocks where you aim: **1** anchor, **2** smooth block, **3** platform, **4** checkpoint, **5** finish, **6** crumbling anchor, **7** wind (**R** flips its direction), **8** updraft, **9** laser gate, **0** zip-line.
   - **Editing:** Left click places, right click deletes, the mouse wheel or **[ ]** changes size, **R** rotates, **Q** copies the block you're aiming at, and **Z** undoes.
   - **Testing:** **T** test-plays your level and **T** again takes you back to editing.
   - **My Levels:** Every change saves automatically. My Levels lists your levels with Play, Edit, Share and Delete.
@@ -65,7 +66,7 @@ The full controls list sits behind the **Controls** button on the main menu.
 - **Rope shot:** The hook visibly flies from the gun's muzzle to the block at 250 m/s, with the rope wiggling behind it, and catches when it lands. Let go before it lands and the shot is cancelled. The rope snaps taut when it catches and sags when it goes slack.
 - **Music:** A generated soundtrack (A minor, 100 BPM) that builds with your speed. A calm pad and bass play in the menu or when standing still. An arpeggio joins when you move, kick and hi-hats when you swing fast, and snare and a busier bass when you're flying. It has its own volume slider in the menu, and **M** mutes everything.
 - **Level flyover:** Before you play a level, the camera sweeps along the route from start to finish (Space or a click skips it; it can be switched off in Settings). Restarts, editor test runs and the tutorial skip it.
-- **Sky themes:** Levels 1–10 are set in daytime, 11–20 at sunset and 21–30 at night (with stars and a moon). A fourth theme, **Storm**, has dark clouds, rain, lightning and thunder. You can pick any of the four for your own levels in the editor.
+- **Sky themes:** Levels 1–10 are set in daytime, 11–20 at sunset, 21–30 at night (with stars and a moon) and 31–40 in a **Storm** with dark clouds, rain, lightning and thunder. You can pick any of the four for your own levels in the editor.
 - **Speed effects:** Thin speed lines and darker screen edges fade in when you fly fast (they can be switched off in Settings). Sparks fly where the hook bites.
 - **Feel:** The view widens with speed, the camera shakes on hard landings and when the hook catches, and wind and rope-creak sounds follow your speed.
 - **Achievements:** 30 to earn, with a pop-up when you unlock one. They cover finishing each set of levels, medals, skill (no falls, no reeling, few hooks, top speeds, long swings, beating your ghost), distance and play time, daily streaks, building and publishing levels, and holding a world record. They're listed on the Profile page's Achievements tab, with progress bars.
@@ -87,6 +88,7 @@ The full controls list sits behind the **Controls** button on the main menu.
 | `src/physics.js` | Movement, rope, collisions, hook raycast |
 | `src/run.js` | Timer, checkpoints, finish, respawn |
 | `src/course.js` | Level generator and difficulty settings |
+| `src/hazards.js` | Storm blocks: crumbling anchors, wind, laser gates, zip-lines |
 | `src/levels.js` | The 30 levels: names and seeds |
 | `src/editor.js` | Level editor: placing, deleting, undo, flying |
 | `src/custom.js` | Custom level checks and share codes |

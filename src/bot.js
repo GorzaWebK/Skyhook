@@ -1,6 +1,7 @@
 import { Vector3 } from 'three';
 import { eyePosition, raycast, TUNING } from './physics.js';
 import { hook, unhook } from './run.js';
+import { CRUMBLE_DELAY } from './hazards.js';
 
 // A simple autopilot used by the automated tests (and ?bot=1) to prove a
 // course can actually be finished. It hooks each anchor in turn, reels in a
@@ -19,7 +20,9 @@ export function botInput(bot) {
   const input = { forward: 1, right: 0, jump: false, reel: false };
 
   // Skip anchors we've already flown past (e.g. after a checkpoint respawn).
-  while (bot.target < anchors.length && !p.hook && anchors[bot.target].center.z > p.pos.z + 2) {
+  // ...and crumbling anchors that are already falling or gone.
+  const unusable = (x) => x.gone || (x.crumble && x.crumble.t !== null);
+  while (bot.target < anchors.length && !p.hook && (anchors[bot.target].center.z > p.pos.z + 2 || unusable(anchors[bot.target]))) {
     bot.target++;
   }
 
@@ -60,7 +63,8 @@ export function botInput(bot) {
     const hv = Math.hypot(p.vel.x, p.vel.z);
     const heading = hv > 1 ? (p.vel.x * nx + p.vel.z * nz) / (hv * Math.hypot(nx, nz)) : 0;
     const past = p.pos.z < a.center.z - 3;
-    if ((past && p.vel.z < -6 && heading > 0.8) || bot.holdTime > 4) {
+    const crumbling = p.hook.box.crumble && p.hook.time > CRUMBLE_DELAY - 0.2; // let go before it drops
+    if ((past && p.vel.z < -6 && heading > 0.8) || bot.holdTime > 4 || crumbling) {
       unhook(run);
       bot.target++;
     }

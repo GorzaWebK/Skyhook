@@ -1,4 +1,4 @@
-import { generateLevel } from './course.js';
+import { generateLevel, generateStormLevel } from './course.js';
 import { LEVEL_SEEDS, LEVEL_PAR } from './level-seeds.js';
 import { themeForLevelIndex } from './themes.js';
 
@@ -9,6 +9,9 @@ export const LEVEL_NAMES = [
   'Steel Garden', 'Tailspin', 'Thin Air', 'Overpass', 'Freefall',
   'Labyrinth', 'Storm Front', 'Needle Run', 'Jet Stream', 'Vertigo',
   'Razor Ridge', 'Stratosphere', 'No Mercy', 'Edge of the World', 'Skyhook',
+  // Storm levels: crumbling anchors, wind, laser gates and zip-lines.
+  'Thunderhead', 'Gale Force', 'Static', 'Crumbling Sky', 'Live Wire',
+  'Squall', 'Downdraft', 'Lightning Rod', 'Maelstrom', 'Eye of the Storm',
 ];
 
 // Medal target times: gold is the autopilot's time, silver 30% slower,
@@ -44,7 +47,9 @@ export const LEVELS = LEVEL_NAMES.map((name, index) => ({
 }));
 
 export function buildLevel(level) {
-  const course = generateLevel(level.index, level.seed, LEVELS.length);
+  // Levels 1-30 always use the 30-level difficulty curve (so their layouts
+  // never change); 31-40 are storm levels.
+  const course = level.index < 30 ? generateLevel(level.index, level.seed, 30) : generateStormLevel(level.index - 30, level.seed);
   course.theme = level.theme;
   return course;
 }
