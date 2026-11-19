@@ -393,6 +393,8 @@ async function waitForServer() {
     await page.waitForTimeout(400);
     check(await page.isVisible('#screen-editor-menu'), 'Esc in the editor opens the editor menu');
     await page.fill('#edit-name', 'Sky Bridge');
+    await page.selectOption('#edit-theme', 'storm');
+    check(await g(() => window.__skyhook.renderer.themeId === 'storm' && window.__skyhook.customLevel.data.theme === 'storm'), 'the editor sky picker changes and saves the theme');
     await page.click('#edit-share');
     let code = '';
     for (let i = 0; i < 20 && !code; i++) { await page.waitForTimeout(100); code = await page.inputValue('#edit-share-code'); }
@@ -413,6 +415,37 @@ async function waitForServer() {
     await page.click('.ml-row:first-child [data-act="play"]');
     await page.waitForTimeout(800);
     check(await g(() => window.__skyhook.mode === 'custom' && window.__skyhook.state === 'playing' && window.__skyhook.course.custom), 'an imported level can be played');
+    await g(() => document.exitPointerLock());
+    await page.waitForTimeout(300);
+
+    // Sky themes, speed lines, sparks.
+    for (const [lvl, theme] of [[1, 'day'], [11, 'sunset'], [21, 'night']]) {
+      await page.goto(`${URL}?unlock=all&level=${lvl}`);
+      await page.waitForTimeout(700);
+      check(await g(() => window.__skyhook.renderer.themeId) === theme, `level ${lvl} uses the ${theme} sky`);
+    }
+    await page.click('#play-btn');
+    await page.waitForTimeout(600);
+    await g(() => { const p = window.__skyhook.run.player; p.pos.set(0, 40, -60); p.vel.set(0, 3, -62); });
+    await page.waitForTimeout(900);
+    await g(() => window.__skyhook.run.player.vel.set(0, 3, -62));
+    check(await g(() => window.__skyhook.renderer.speedStrength > 0.3), 'speed lines appear when flying fast');
+    await g(() => { window.__skyhook.renderer.speedFx = false; });
+    await page.waitForTimeout(900);
+    check(await g(() => window.__skyhook.renderer.speedStrength < 0.1), 'speed lines can be switched off in settings');
+    await g(() => { window.__skyhook.renderer.speedFx = true; window.__skyhook.restart(); });
+    await page.waitForTimeout(300);
+    await g(() => {
+      const s = window.__skyhook; const p = s.run.player; const a = s.course.anchors[0].center;
+      const ex = a.x - p.pos.x, ey = a.y - (p.pos.y + 0.35), ez = a.z - p.pos.z;
+      p.yaw = Math.atan2(-ex, -ez); p.pitch = Math.atan2(ey, Math.hypot(ex, ez));
+    });
+    await page.waitForTimeout(300);
+    await page.mouse.down();
+    let sparked = false;
+    for (let i = 0; i < 20 && !sparked; i++) { await page.waitForTimeout(80); sparked = await g(() => window.__skyhook.renderer.sparks.active); }
+    await page.mouse.up();
+    check(sparked, 'the hook throws sparks when it bites');
     await g(() => document.exitPointerLock());
     await page.waitForTimeout(300);
 

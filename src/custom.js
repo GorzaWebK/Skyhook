@@ -1,4 +1,5 @@
 import { CUSTOM_KINDS } from './course.js';
+import { THEME_IDS } from './themes.js';
 
 // Custom levels: validation and share codes.
 // A share code is "SKY1." + base64url(deflate(JSON)), or "SKY0." +
@@ -28,7 +29,8 @@ export function validateLevel(data) {
     return [k, ...nums.map(round)];
   });
   if (finishes > 1) throw new Error('A level can only have one finish');
-  return { v: 1, name, blocks };
+  const theme = THEME_IDS.includes(data.theme) ? data.theme : 'day';
+  return { v: 1, name, theme, blocks };
 }
 
 function toBase64Url(bytes) {

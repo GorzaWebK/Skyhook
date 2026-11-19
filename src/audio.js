@@ -180,6 +180,12 @@ export class Sound {
     );
   }
 
+  thunder() {
+    const d = 0.2 + Math.random() * 0.8;
+    this.burst({ freq: 180, q: 0.5, dur: 2.6, gain: 0.5, type: 'lowpass', sweepTo: 60, delay: d });
+    this.burst({ freq: 900, q: 0.7, dur: 0.4, gain: 0.2, type: 'lowpass', delay: d });
+  }
+
   fall() {
     this.tone({ type: 'sawtooth', freq: 400, to: 80, dur: 0.5, gain: 0.08 });
   }

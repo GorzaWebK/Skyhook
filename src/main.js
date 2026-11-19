@@ -2,6 +2,7 @@ import { isHookable, insideBox, buildTutorialCourse, buildCustomCourse } from '.
 import { Editor, TOOLS } from './editor.js';
 import { encodeLevel, decodeLevel, newLevelId } from './custom.js';
 import { onlineEnabled, submitScore, getLeaderboard, cleanName } from './online.js';
+import { THEMES } from './themes.js';
 import { TUTORIAL_STEPS, createTutorialFlags } from './tutorial.js';
 import { LEVELS, MEDALS, buildLevel, medalFor, nextMedal } from './levels.js';
 import { raycast, eyePosition, aimDirection, FIXED_DT, TUNING } from './physics.js';
@@ -31,7 +32,7 @@ const ui = {
   mlShare: $('ml-share'), mlShareTitle: $('ml-share-title'), mlShareCode: $('ml-share-code'), mlShareMsg: $('ml-share-msg'),
   editName: $('edit-name'), editStatus: $('edit-status'), editResume: $('edit-resume'), editTest: $('edit-test'),
   editShare: $('edit-share'), editShareBox: $('edit-share-box'), editShareCode: $('edit-share-code'),
-  editShareMsg: $('edit-share-msg'), editExit: $('edit-exit'),
+  editShareMsg: $('edit-share-msg'), editExit: $('edit-exit'), editTheme: $('edit-theme'),
   boardsBtn: $('boards-btn'), boardPrev: $('board-prev'), boardNext: $('board-next'), boardLevel: $('board-level'),
   boardName: $('board-name'), boardList: $('board-list'), finishBoard: $('finish-board'),
   epName: $('ep-name'), epTools: $('ep-tools'), epSize: $('ep-size'), epStatus: $('ep-status'), skinsBtn: $('skins-btn'), skinGrid: $('skin-grid'),
@@ -193,6 +194,7 @@ function loadDef(def) {
   best = storage.getBest(def.id);
   splits = [];
   renderer.buildCourse(course);
+  renderer.setTheme(course.theme || 'day');
   if (!def.tutorial && !def.custom) {
     progress.last = def.index;
     storage.setProgress(progress);
@@ -242,6 +244,7 @@ function openEditor(lvl) {
   customLevel = lvl;
   editor.open(lvl); // builds the level's course in the renderer
   course = editor.course;
+  renderer.setTheme(lvl.data.theme || 'day');
   run = createRun(course);
   level = customDef(lvl);
   const p = run.player;
@@ -525,6 +528,7 @@ function showScreen(name) {
   }
   if (name === 'editor-menu') {
     ui.editName.value = customLevel?.data.name ?? '';
+    ui.editTheme.value = customLevel?.data.theme || 'day';
     ui.editShareBox.classList.add('hidden');
     ui.editResume.textContent = mode === 'test' ? 'RESUME TEST' : 'RESUME EDITING';
     ui.editTest.textContent = mode === 'test' ? 'Back to editor (T)' : 'Test level (T)';
@@ -711,6 +715,7 @@ function handleEvents(events) {
         if (e.speed > 15) renderer.addShake(Math.min(0.6, e.speed / 60));
         break;
       case 'attach':
+        if (run.player.hook) renderer.hookSparks(run.player.hook.point, run.player.hook.box);
         sound.attach();
         renderer.addShake(0.15);
         renderer.ropeSnap();
@@ -888,6 +893,14 @@ ui.editTest.addEventListener('click', () => {
 });
 ui.editShare.addEventListener('click', () => showShareCode(customLevel, ui.editShareBox, ui.editShareCode, ui.editShareMsg));
 ui.editExit.addEventListener('click', exitEditor);
+ui.editTheme.innerHTML = Object.entries(THEMES).map(([id, t]) => `<option value="${id}">${t.name}</option>`).join('');
+ui.editTheme.addEventListener('change', () => {
+  if (!customLevel) return;
+  customLevel.data.theme = ui.editTheme.value;
+  saveCustom(customLevel);
+  renderer.setTheme(customLevel.data.theme);
+});
+renderer.onThunder = () => sound.thunder();
 ui.editName.addEventListener('input', () => {
   if (!customLevel) return;
   customLevel.data.name = ui.editName.value.replace(/[<>]/g, '').slice(0, 24) || 'Untitled';

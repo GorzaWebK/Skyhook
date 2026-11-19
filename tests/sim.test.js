@@ -368,3 +368,19 @@ test('editor: place, delete, undo, copy, and only one finish', () => {
   ed.place({ ...cam, pitch: 0.3 });
   assert.equal(lvl.data.blocks.filter((b) => b[0] === 'f').length, 1, 'placing a second finish replaces the first');
 });
+
+// --- Sky themes -----------------------------------------------------------------
+import { themeForLevelIndex, THEME_IDS } from '../src/themes.js';
+
+test('sky themes: day, sunset and night by level group; custom levels keep a valid theme', async () => {
+  assert.equal(themeForLevelIndex(0), 'day');
+  assert.equal(themeForLevelIndex(9), 'day');
+  assert.equal(themeForLevelIndex(10), 'sunset');
+  assert.equal(themeForLevelIndex(29), 'night');
+  assert.equal(buildLevel(LEVELS[15]).theme, 'sunset');
+  assert.deepEqual(THEME_IDS.sort(), ['day', 'night', 'storm', 'sunset']);
+  const data = { ...handmade(), theme: 'storm' };
+  assert.equal(buildCustomCourse(data).theme, 'storm');
+  assert.equal((await decodeLevel(await encodeLevel(data))).theme, 'storm', 'theme survives a share code');
+  assert.equal(validateLevel({ ...data, theme: 'lava' }).theme, 'day', 'unknown themes fall back to day');
+});

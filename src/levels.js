@@ -1,5 +1,6 @@
 import { generateLevel } from './course.js';
 import { LEVEL_SEEDS, LEVEL_PAR } from './level-seeds.js';
+import { themeForLevelIndex } from './themes.js';
 
 export const LEVEL_NAMES = [
   'First Flight', 'Easy Breeze', 'Stepping Stones', 'Little Leaps', 'Updraft',
@@ -39,8 +40,11 @@ export const LEVELS = LEVEL_NAMES.map((name, index) => ({
   name,
   seed: LEVEL_SEEDS[index],
   medals: medalTimes(LEVEL_PAR[index]),
+  theme: themeForLevelIndex(index),
 }));
 
 export function buildLevel(level) {
-  return generateLevel(level.index, level.seed, LEVELS.length);
+  const course = generateLevel(level.index, level.seed, LEVELS.length);
+  course.theme = level.theme;
+  return course;
 }

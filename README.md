@@ -58,6 +58,8 @@ The full controls list sits behind the **Controls** button on the main menu.
 - **Grapple gun:** You hold a grapple gun in a gloved hand, drawn in first person and built from shapes in code. It sways as you look around, bobs as you walk, leans when you strafe, kicks when you fire, and its glowing spool spins when you reel in.
 - **Rope shot:** The hook visibly flies from the gun's muzzle to the block at 250 m/s, with the rope wiggling behind it, and catches when it lands. Let go before it lands and the shot is cancelled. The rope snaps taut when it catches and sags when it goes slack.
 - **Music:** A generated soundtrack (A minor, 100 BPM) that builds with your speed. A calm pad and bass play in the menu or when standing still. An arpeggio joins when you move, kick and hi-hats when you swing fast, and snare and a busier bass when you're flying. It has its own volume slider in the menu, and **M** mutes everything.
+- **Sky themes:** Levels 1–10 are set in daytime, 11–20 at sunset and 21–30 at night (with stars and a moon). A fourth theme, **Storm**, has dark clouds, rain, lightning and thunder. You can pick any of the four for your own levels in the editor.
+- **Speed effects:** Thin speed lines and darker screen edges fade in when you fly fast (they can be switched off in Settings). Sparks fly where the hook bites.
 - **Feel:** The view widens with speed, the camera shakes on hard landings and when the hook catches, and wind and rope-creak sounds follow your speed.
 - **Settings page:** mouse sensitivity, invert mouse, field of view, separate sound effects and music volumes, mute, camera shake on/off and speed effects on/off. All are saved.
 
@@ -88,6 +90,8 @@ The full controls list sits behind the **Controls** button on the main menu.
 | `src/render.js` | three.js scene, sky, clouds, hook head |
 | `src/viewmodel.js` | First-person arm and grapple gun |
 | `src/rope.js` | Rope drawn as a camera-facing strip |
+| `src/themes.js` | Sky themes (day, sunset, night, storm) |
+| `src/effects.js` | Sparks, rain and speed lines |
 | `src/textures.js` | Textures drawn on a canvas |
 | `src/audio.js` | Synthesised sound effects |
 | `src/music.js` | Generated music that follows your speed |

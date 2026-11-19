@@ -182,6 +182,7 @@
         background: rgba(0,0,0,0.3); color: var(--text); font: 12px ui-monospace, Consolas, monospace; resize: vertical; user-select: text; }
       .field { display: block; font-size: 14px; color: var(--muted); margin-top: 8px; }
       .field input { font: 15px system-ui, sans-serif; }
+      .field select { display: block; width: 100%; margin: 6px 0; padding: 8px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); background: #1b2638; color: var(--text); font: 15px system-ui, sans-serif; }
       .row { display: flex; align-items: center; gap: 10px; }
       .msg { font-size: 13px; color: var(--muted); }
       .msg.err { color: #ff7a7a; } .msg.good { color: #7dff9a; }
@@ -370,6 +371,7 @@
       <div id="screen-editor-menu" class="card screen hidden">
         <h2>Level editor</h2>
         <label class="field">Level name <input id="edit-name" maxlength="24" /></label>
+        <label class="field">Sky <select id="edit-theme"></select></label>
         <p id="edit-status" class="hint"></p>
         <button class="play" id="edit-resume">RESUME EDITING</button>
         <div class="btn-row">

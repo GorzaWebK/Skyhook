@@ -3,6 +3,9 @@ import { makePanelTexture, makeStripeTexture, makeCloudTexture } from './texture
 import { eyePosition } from './physics.js';
 import { ViewModel, makeClaw } from './viewmodel.js';
 import { Rope } from './rope.js';
+import { THEMES } from './themes.js';
+import { Sparks, Rain, makeSpeedLines } from './effects.js';
+import { faceNormal } from './editor.js';
 
 const SKY_TOP = new THREE.Color('#3b7bd4');
 const SKY_HORIZON = new THREE.Color('#bfdcf2');
@@ -43,9 +46,13 @@ function makeSky() {
     depthWrite: false,
     fog: false,
     uniforms: {
-      top: { value: SKY_TOP },
-      horizon: { value: SKY_HORIZON },
-      sunDir: { value: SUN_DIR },
+      top: { value: SKY_TOP.clone() },
+      horizon: { value: SKY_HORIZON.clone() },
+      sunDir: { value: SUN_DIR.clone() },
+      sunColor: { value: new THREE.Color('#fff0d6') },
+      sunGlow: { value: 1 },
+      stars: { value: 0 },
+      flash: { value: 0 },
     },
     vertexShader: `
       varying vec3 vDir;
@@ -55,14 +62,24 @@ function makeSky() {
         gl_Position = p.xyww;
       }`,
     fragmentShader: `
-      uniform vec3 top; uniform vec3 horizon; uniform vec3 sunDir;
+      uniform vec3 top; uniform vec3 horizon; uniform vec3 sunDir; uniform vec3 sunColor;
+      uniform float sunGlow; uniform float stars; uniform float flash;
       varying vec3 vDir;
+      float hash(vec3 p) { return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
       void main() {
-        float h = clamp(vDir.y, -1.0, 1.0);
+        vec3 d = normalize(vDir);
+        float h = clamp(d.y, -1.0, 1.0);
         vec3 col = mix(horizon, top, pow(max(h, 0.0), 0.55));
         col = mix(col, horizon * 1.02, smoothstep(0.0, -0.3, h));
-        float s = max(dot(normalize(vDir), sunDir), 0.0);
-        col += vec3(1.0, 0.92, 0.75) * (pow(s, 1800.0) * 3.0 + pow(s, 12.0) * 0.25);
+        float s = max(dot(d, sunDir), 0.0);
+        col += sunColor * (pow(s, 1800.0) * 3.0 * min(1.0, sunGlow * 2.0) + pow(s, 12.0) * 0.25 * sunGlow + pow(s, 3.0) * 0.12 * max(sunGlow - 1.0, 0.0));
+        if (stars > 0.0) {
+          vec3 cell = floor(d * 260.0);
+          float r = hash(cell);
+          float twinkle = 0.6 + 0.4 * sin(r * 100.0);
+          col += vec3(0.85, 0.9, 1.0) * step(0.9965, r) * twinkle * stars * smoothstep(0.02, 0.25, h);
+        }
+        col += vec3(0.75, 0.8, 0.95) * flash;
         gl_FragColor = vec4(col, 1.0);
       }`,
   });
@@ -123,11 +140,13 @@ export class Renderer {
     this.camera.rotation.order = 'YXZ';
     this.baseFov = 85;
 
-    this.scene.add(makeSky());
-    this.scene.add(new THREE.HemisphereLight('#dceeff', '#6b7488', 1.6));
-    const sun = new THREE.DirectionalLight('#fff3e0', 2.2);
-    sun.position.copy(SUN_DIR).multiplyScalar(100);
-    this.scene.add(sun);
+    this.sky = makeSky();
+    this.scene.add(this.sky);
+    this.hemi = new THREE.HemisphereLight('#dceeff', '#6b7488', 1.6);
+    this.scene.add(this.hemi);
+    this.sunLight = new THREE.DirectionalLight('#fff3e0', 2.2);
+    this.sunLight.position.copy(SUN_DIR).multiplyScalar(100);
+    this.scene.add(this.sunLight);
 
     this.textures = { panel: makePanelTexture(), stripes: makeStripeTexture() };
     this.courseGroup = new THREE.Group();
@@ -137,6 +156,16 @@ export class Renderer {
     this.addRope();
     this.addTargetMarker();
     this.viewModel = new ViewModel();
+    this.sparks = new Sparks(this.scene);
+    this.rain = new Rain(this.scene);
+    this.fxScene = new THREE.Scene();
+    this.speedLines = makeSpeedLines();
+    this.fxScene.add(this.speedLines);
+    this.speedStrength = 0;
+    this.flash = 0;
+    this.nextLightning = 5;
+    this.onThunder = null; // set by the game to play thunder
+    this.setTheme('day');
 
     this.shake = 0;
     this.snapT = 0;
@@ -152,6 +181,43 @@ export class Renderer {
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     this.viewModel?.resize(w / h);
+    if (this.speedLines) this.speedLines.material.uniforms.aspect.value = w / h;
+  }
+
+  setTheme(id) {
+    const t = THEMES[id] || THEMES.day;
+    this.themeId = THEMES[id] ? id : 'day';
+    this.theme = t;
+    const u = this.sky.material.uniforms;
+    u.top.value.set(t.skyTop);
+    u.horizon.value.set(t.horizon);
+    u.sunDir.value.set(...t.sunDir).normalize();
+    u.sunColor.value.set(t.sunColor);
+    u.sunGlow.value = t.sunGlow;
+    u.stars.value = t.stars;
+    this.scene.fog.color.set(t.horizon);
+    this.scene.fog.near = t.fog[0];
+    this.scene.fog.far = t.fog[1];
+    this.hemi.color.set(t.hemiSky);
+    this.hemi.groundColor.set(t.hemiGround);
+    this.hemi.intensity = this.baseHemi = t.hemi;
+    this.sunLight.color.set(t.sun);
+    this.sunLight.intensity = t.sunLight;
+    this.sunLight.position.copy(u.sunDir.value).multiplyScalar(100);
+    this.renderer.toneMappingExposure = t.exposure;
+    for (const layer of this.cloudLayers) {
+      layer.mesh.material.color.set(t.clouds);
+      layer.mesh.material.opacity = t.cloudOpacity * layer.baseOpacity;
+    }
+    this.floor.material.color.set(t.horizon);
+    this.rain.mesh.visible = !!t.rain;
+    this.flash = 0;
+  }
+
+  // Sparks where the hook bites into a block.
+  hookSparks(point, box) {
+    const n = box ? faceNormal(box, point) : new THREE.Vector3(0, 1, 0);
+    this.sparks.burst(point, n, box?.kind === 'anchor' ? '#ffb020' : '#ffe08a');
   }
 
   addClouds() {
@@ -169,13 +235,13 @@ export class Renderer {
       mesh.rotation.x = -Math.PI / 2;
       mesh.position.y = y;
       this.scene.add(mesh);
-      this.cloudLayers.push({ mesh, tex: t, speed });
+      this.cloudLayers.push({ mesh, tex: t, speed, baseOpacity: opacity });
     }
     // Solid haze under the clouds so you never see "through" the world.
-    const floor = new THREE.Mesh(
+    const floor = (this.floor = new THREE.Mesh(
       new THREE.PlaneGeometry(4000, 4000),
       new THREE.MeshBasicMaterial({ color: SKY_HORIZON })
-    );
+    ));
     floor.rotation.x = -Math.PI / 2;
     floor.position.y = -70;
     this.scene.add(floor);
@@ -379,8 +445,29 @@ export class Renderer {
       layer.tex.offset.y = this.time * 0.001 * layer.speed;
     }
 
+    // Effects.
+    this.sparks.update(dt);
+    this.rain.update(dt, cam.position, this.time);
+    if (this.theme.lightning) {
+      this.nextLightning -= dt;
+      if (this.nextLightning <= 0) {
+        this.flash = 1;
+        this.nextLightning = 6 + Math.random() * 10;
+        this.onThunder?.();
+      }
+    }
+    this.flash = Math.max(0, this.flash - dt * 3.5);
+    const flicker = this.flash > 0.3 ? 1 : this.flash; // a sharp flash, then a fade
+    this.sky.material.uniforms.flash.value = flicker * 0.9;
+    this.hemi.intensity = this.baseHemi + flicker * 2.5;
+    const speedTarget = this.speedFx === false || this.showViewModel === false ? 0 : Math.min(1, Math.max(0, (speed - 26) / 30));
+    this.speedStrength += (speedTarget - this.speedStrength) * Math.min(1, dt * 5);
+    this.speedLines.material.uniforms.strength.value = this.speedStrength;
+    this.speedLines.material.uniforms.time.value = this.time;
+
     this.renderer.clear();
     this.renderer.render(this.scene, cam);
+    if (this.speedStrength > 0.01) this.renderer.render(this.fxScene, this.viewModel.camera);
     if (this.showViewModel !== false) {
       this.renderer.clearDepth();
       this.renderer.render(this.viewModel.scene, this.viewModel.camera);

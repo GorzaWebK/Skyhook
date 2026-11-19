@@ -222,6 +222,7 @@ export function buildCustomCourse(data) {
     seed: 0, boxes, anchors, checkpoints, finish, spawn, startZone,
     killY: Math.min(-45, lowest - 25),
     custom: true,
+    theme: data.theme || 'day',
   };
 }
 
