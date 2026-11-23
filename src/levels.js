@@ -46,10 +46,14 @@ export const LEVELS = LEVEL_NAMES.map((name, index) => ({
   theme: themeForLevelIndex(index),
 }));
 
+// Levels where a friend's face joins the creator's under the start platform.
+export const FRIEND_LEVELS = [29, 31];
+
 export function buildLevel(level) {
   // Levels 1-30 always use the 30-level difficulty curve (so their layouts
   // never change); 31-40 are storm levels.
   const course = level.index < 30 ? generateLevel(level.index, level.seed, 30) : generateStormLevel(level.index - 30, level.seed);
   course.theme = level.theme;
+  if (FRIEND_LEVELS.includes(level.number)) course.friend = true;
   return course;
 }

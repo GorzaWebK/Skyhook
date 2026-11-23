@@ -747,3 +747,9 @@ test('account saves: pack into an SV1. code and back', async () => {
   await assert.rejects(decodeSave('SKY1.abc'));
   await assert.rejects(decodeSave('SV1.!!!'));
 });
+
+test('easter egg: a friend joins the creator under the start platform on levels 29 and 31 only', async () => {
+  const { LEVELS: L, buildLevel: build, FRIEND_LEVELS } = await import('../src/levels.js');
+  assert.deepEqual(FRIEND_LEVELS, [29, 31]);
+  for (const l of L) assert.equal(!!build(l).friend, FRIEND_LEVELS.includes(l.number), `level ${l.number}`);
+});

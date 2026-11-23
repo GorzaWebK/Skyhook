@@ -9,14 +9,15 @@ import { faceNormal } from './editor.js';
 import { ghostAt } from './ghost.js';
 import { laserOn, CRUMBLE_DELAY } from './hazards.js';
 import faceUrl from './assets/face.png';
+import friendUrl from './assets/friend.png';
 
 const SKY_TOP = new THREE.Color('#3b7bd4');
 const SKY_HORIZON = new THREE.Color('#bfdcf2');
 const SUN_DIR = new THREE.Vector3(-0.4, 0.55, -0.75).normalize();
 
 // Easter egg: the creator's face, as a round badge on the underside of every
-// start platform.
-function makeFaceTexture() {
+// start platform (and a friend's next to it on a couple of levels).
+function makeFaceTexture(url, ring) {
   const size = 256;
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = size;
@@ -34,23 +35,26 @@ function makeFaceTexture() {
     g.drawImage(img, 0, 0, size, size);
     g.restore();
     g.lineWidth = 12;
-    g.strokeStyle = '#ff8a3d';
+    g.strokeStyle = ring;
     g.beginPath();
     g.arc(r, r, r - 8, 0, Math.PI * 2);
     g.stroke();
     tex.needsUpdate = true;
   };
-  img.src = faceUrl;
+  img.src = url;
   return tex;
 }
 
-function makeFaceDecal(box, texture) {
-  const d = Math.min(box.size.x, box.size.z) * 0.55;
+// size: badge width as a share of the platform; dx: sideways offset (as a
+// share too; + is to the right for someone underneath facing -Z).
+function makeFaceDecal(box, texture, size = 0.55, dx = 0, name = 'face') {
+  const w = Math.min(box.size.x, box.size.z);
+  const d = w * size;
   const geo = new THREE.PlaneGeometry(d, d);
   geo.rotateX(Math.PI / 2); // face down, upright for someone underneath looking the way the level goes (-Z)
   const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: texture, transparent: true, alphaTest: 0.5, color: '#e6e6e6' }));
-  mesh.position.set(box.center.x, box.center.y - box.size.y / 2 - 0.03, box.center.z);
-  mesh.name = 'face';
+  mesh.position.set(box.center.x + dx * w, box.center.y - box.size.y / 2 - 0.03, box.center.z);
+  mesh.name = name;
   return mesh;
 }
 
@@ -194,7 +198,7 @@ export class Renderer {
     this.sunLight.position.copy(SUN_DIR).multiplyScalar(100);
     this.scene.add(this.sunLight);
 
-    this.textures = { panel: makePanelTexture(), stripes: makeStripeTexture(), face: makeFaceTexture() };
+    this.textures = { panel: makePanelTexture(), stripes: makeStripeTexture(), face: makeFaceTexture(faceUrl, '#ff8a3d'), friend: makeFaceTexture(friendUrl, '#5ff0ff') };
     this.courseGroup = new THREE.Group();
     this.scene.add(this.courseGroup);
 
@@ -433,7 +437,12 @@ export class Renderer {
       mesh.position.copy(b.center);
       this.courseGroup.add(mesh);
       if (b.motion || b.crumble) this.movers.push({ box: b, mesh });
-      if (b.start) this.courseGroup.add(makeFaceDecal(b, this.textures.face));
+      if (b.start && course.friend) {
+        this.courseGroup.add(makeFaceDecal(b, this.textures.face, 0.42, -0.23));
+        this.courseGroup.add(makeFaceDecal(b, this.textures.friend, 0.42, 0.23, 'friend'));
+      } else if (b.start) {
+        this.courseGroup.add(makeFaceDecal(b, this.textures.face));
+      }
     }
 
     // Wind zones: see-through boxes with streaks flowing along the wind.

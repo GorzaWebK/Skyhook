@@ -96,7 +96,8 @@ The full controls list sits behind the **Controls** button on the main menu.
 | `src/editor.js` | Level editor: placing, deleting, undo, flying |
 | `src/custom.js` | Custom level checks and share codes |
 | `src/online.js` | Online leaderboards, world record ghosts, community levels and accounts (Firebase) |
-| `src/assets/face.png` | The game's only image file: the creator's face, an easter egg under every start platform |
+| `src/assets/face.png` | Easter egg: the creator's face, under every start platform |
+| `src/assets/friend.png` | Easter egg: a friend's face, next to the creator's on levels 29 and 31 (`FRIEND_LEVELS` in `src/levels.js`) |
 | `src/account.js` | Account codes: making and reading codes, packing and merging saves |
 | `src/ghost.js` | Recording, compressing and playing back ghosts |
 | `src/online-config.js` | Firebase web config (null = online off) |
