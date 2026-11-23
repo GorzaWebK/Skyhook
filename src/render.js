@@ -8,10 +8,51 @@ import { Sparks, Rain, makeSpeedLines, HookTrail } from './effects.js';
 import { faceNormal } from './editor.js';
 import { ghostAt } from './ghost.js';
 import { laserOn, CRUMBLE_DELAY } from './hazards.js';
+import faceUrl from './assets/face.png';
 
 const SKY_TOP = new THREE.Color('#3b7bd4');
 const SKY_HORIZON = new THREE.Color('#bfdcf2');
 const SUN_DIR = new THREE.Vector3(-0.4, 0.55, -0.75).normalize();
+
+// Easter egg: the creator's face, as a round badge on the underside of every
+// start platform.
+function makeFaceTexture() {
+  const size = 256;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const img = new Image();
+  img.onload = () => {
+    const g = canvas.getContext('2d');
+    const r = size / 2;
+    g.save();
+    g.beginPath();
+    g.arc(r, r, r - 10, 0, Math.PI * 2);
+    g.clip();
+    g.imageSmoothingQuality = 'high';
+    g.drawImage(img, 0, 0, size, size);
+    g.restore();
+    g.lineWidth = 12;
+    g.strokeStyle = '#ff8a3d';
+    g.beginPath();
+    g.arc(r, r, r - 8, 0, Math.PI * 2);
+    g.stroke();
+    tex.needsUpdate = true;
+  };
+  img.src = faceUrl;
+  return tex;
+}
+
+function makeFaceDecal(box, texture) {
+  const d = Math.min(box.size.x, box.size.z) * 0.55;
+  const geo = new THREE.PlaneGeometry(d, d);
+  geo.rotateX(Math.PI / 2); // face down, upright for someone underneath looking the way the level goes (-Z)
+  const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: texture, transparent: true, alphaTest: 0.5, color: '#e6e6e6' }));
+  mesh.position.set(box.center.x, box.center.y - box.size.y / 2 - 0.03, box.center.z);
+  mesh.name = 'face';
+  return mesh;
+}
 
 const KIND_STYLE = {
   platform: { color: '#c9ccd2', tile: 4 },
@@ -153,7 +194,7 @@ export class Renderer {
     this.sunLight.position.copy(SUN_DIR).multiplyScalar(100);
     this.scene.add(this.sunLight);
 
-    this.textures = { panel: makePanelTexture(), stripes: makeStripeTexture() };
+    this.textures = { panel: makePanelTexture(), stripes: makeStripeTexture(), face: makeFaceTexture() };
     this.courseGroup = new THREE.Group();
     this.scene.add(this.courseGroup);
 
@@ -392,6 +433,7 @@ export class Renderer {
       mesh.position.copy(b.center);
       this.courseGroup.add(mesh);
       if (b.motion || b.crumble) this.movers.push({ box: b, mesh });
+      if (b.start) this.courseGroup.add(makeFaceDecal(b, this.textures.face));
     }
 
     // Wind zones: see-through boxes with streaks flowing along the wind.

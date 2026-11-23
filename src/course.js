@@ -48,7 +48,9 @@ export function levelParams(d) {
 
 function startArea(boxes) {
   // Start platform: top surface at y = 0, player faces -Z.
-  boxes.push(box(new Vector3(0, -1, 0), new Vector3(14, 2, 14), 'platform'));
+  const start = box(new Vector3(0, -1, 0), new Vector3(14, 2, 14), 'platform');
+  start.start = true; // (the renderer puts a little surprise underneath)
+  boxes.push(start);
   return {
     spawn: { pos: new Vector3(0, 0.51, 4), yaw: 0 },
     startZone: trigger(new Vector3(0, 4, 0), new Vector3(14, 10, 14)),

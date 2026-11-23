@@ -634,6 +634,12 @@ async function waitForServer() {
       return { theme: r.themeId, winds: r.windFx.length, lasers: r.laserFx.length, crumble: r.movers.filter((m) => m.box.crumble).length, zips: window.__skyhook.course.boxes.filter((b) => b.kind === 'zip').length };
     });
     check(storm.theme === 'storm' && storm.winds > 0 && storm.lasers > 0 && storm.crumble > 0 && storm.zips > 0, `storm level 35 has its special blocks (${JSON.stringify(storm)})`);
+    const face = await g(() => {
+      const f = window.__skyhook.renderer.courseGroup.children.filter((c) => c.name === 'face');
+      const start = window.__skyhook.course.boxes.find((b) => b.start);
+      return { n: f.length, under: f[0] && start && f[0].position.y < start.center.y - start.size.y / 2, loaded: f[0]?.material.map.image.width === 256 };
+    });
+    check(face.n === 1 && face.under && face.loaded, `the start platform has the face easter egg underneath (${JSON.stringify(face)})`);
     await g(() => { const p = window.__skyhook.run.player; p.pitch = 0.15; });
     await page.waitForTimeout(500);
     await page.screenshot({ path: 'test-results/storm-level.png' });
