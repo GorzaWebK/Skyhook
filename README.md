@@ -1,14 +1,39 @@
-# Skyhook
+<div align="center">
+
+<img src="docs/media/sunset-run.gif" width="640" alt="Skyhook: swinging through a sunset level">
+
+# 🪝 S K Y H O O K ☁️
+
+### Fire. Swing. Let go. Fly.
+
+<a href="https://gorzawebk.github.io/Skyhook/"><img src="https://img.shields.io/badge/Launch-play%20now-FF6A13?style=for-the-badge" alt="Launch: play now"></a>
+<img src="https://img.shields.io/badge/Genre-first--person%20grappling-2E7DD7?style=for-the-badge" alt="Genre: first-person grappling">
+<img src="https://img.shields.io/badge/Platform-PC%20·%20keyboard%20+%20mouse-1C2B3A?style=for-the-badge" alt="Platform: PC · keyboard + mouse">
+<img src="https://img.shields.io/badge/Built%20with-Three.js-000000?style=for-the-badge&logo=threedotjs&logoColor=white" alt="Built with: Three.js">
+
+<sub>▲ Level 17 at sunset. Real gameplay, flown in the browser by the game's own autopilot (<code>?bot</code>).</sub>
+
+</div>
+
+```
+  SPLITS   ▸ Level 1   First Flight ....... 0:11.658  🥇
+           ▸ Level 9   Skyline ............ 0:23.117  🥇
+```
 
 A first-person grappling hook game for the browser. Fire your hook at the orange anchor blocks, swing, let go to fling yourself forward, and race to the finish against your best time.
 
-**Play:** https://gorzawebk.github.io/Skyhook/
-
-PC only (keyboard and mouse). Phones and tablets with only a touchscreen see a short "play on a PC" notice. Everything is made in code: the 3D world, textures, sky, clouds and all sound effects. There are no image or audio files.
+PC only (keyboard and mouse). Phones and tablets with only a touchscreen see a short "play on a PC" notice. Everything in the game is made in code: the 3D world, textures, sky, clouds and all sound effects. The game itself loads no image or audio files (the pictures on this page are only screenshots).
 
 > "Skyhook" is a working title. (Repo: GorzaWebK/Skyhook, formerly New-game.)
 
-## Controls
+## 📸 Airtime
+
+<table>
+<tr><td align="center" valign="top"><img src="docs/media/first-flight.jpg" width="400" alt="Hooked onto an anchor, high above the clouds"><br><sub>Hooked onto an anchor, high above the clouds</sub></td><td align="center" valign="top"><img src="docs/media/sunset-swing.jpg" width="400" alt="Swinging into the sunset"><br><sub>Swinging into the sunset</sub></td></tr>
+<tr><td align="center" valign="top"><img src="docs/media/skyline-run.gif" width="400" alt="Level 9, Skyline, chained swings"><br><sub>Level 9, Skyline, chained swings</sub></td><td align="center" valign="top"><img src="docs/media/level-complete.jpg" width="400" alt="Level complete, gold medal"><br><sub>Level complete, gold medal</sub></td></tr>
+</table>
+
+## 🎮 Controls
 
 | Input | Action |
 | --- | --- |
@@ -27,7 +52,7 @@ The crosshair turns orange when you're aiming at something you can hook (red ove
 
 The full controls list sits behind the **Controls** button on the main menu.
 
-## Features
+## ✨ Features
 
 - **Rope physics:** It's a rope, not a stick. It only pulls when it's stretched tight, and reeling in gives you real speed you keep when you let go.
 - **Rope length:** The rope stays the length it was when it caught (up to the 55 m hook range) until you reel in.
@@ -76,7 +101,7 @@ The full controls list sits behind the **Controls** button on the main menu.
 - **Profile: stats:** Lifetime stats on the **Profile** page: play time, distance travelled and swung, hooks fired and landed, top speed, longest swing, hops, jumps, falls, checkpoints, finishes, medals and best daily streak.
 - **Settings page:** graphics quality (High, Medium, Low), a frames-per-second counter, mouse sensitivity, invert mouse, field of view, separate sound effects and music volumes, mute, camera shake on/off and speed effects on/off. All are saved.
 
-## How it's built
+## 🛠️ How it's built
 
 - Plain JavaScript + [Vite](https://vite.dev), [three.js](https://threejs.org) for 3D, and the Web Audio API for sound.
 - Levels are generated from a seed and a difficulty (`src/course.js`, `src/levels.js`), so the same seed always gives the same layout.
@@ -121,7 +146,7 @@ The full controls list sits behind the **Controls** button on the main menu.
 | `src/storage.js` | Best times and settings (localStorage) |
 | `src/bot.js` | Autopilot used by tests |
 
-## Running locally
+## 💻 Running locally
 
 ```bash
 npm install
@@ -132,7 +157,7 @@ npm run test:online  # leaderboard + security rules tests on local Firebase emul
 npm run build      # production build into dist/
 ```
 
-## Online leaderboards
+## 🏆 Online leaderboards
 
 - Scores are stored in the Firebase Realtime Database of the shared `foundry-arena` project, at `skyhook/scores/<level>/<player id>`. Players sign in anonymously behind the scenes.
 - Each player has one entry per level: their best time. With a new best, the run's ghost recording is saved at `skyhook/ghosts/<level>/<player id>` in the same write, so a ghost always matches its score. The security rules only allow you to write your own entry and only to improve your time. They also check names (1–16 letters, digits, spaces or `_ . -`), times (3 s or more) and level names, and allow no extra fields.
@@ -143,11 +168,21 @@ npm run build      # production build into dist/
 - `npm run test:online` runs the rules and leaderboard tests against the local Firebase emulators (Java is needed for the database emulator). `RULES_FILE=firebase/database.rules.full.json npm run test:online` tests the complete console file, including checks that Foundry Arena's paths still behave the same.
 - The automated browser tests run with online switched off, so they never touch the live database.
 
-## Deploying
+## 🚀 Deploying
 
 Every push to `main` runs the tests, builds and deploys to GitHub Pages via `.github/workflows/deploy.yml`. In the repo settings, **Settings → Pages → Source** must be set to **GitHub Actions**.
 
-## Roadmap ideas
+## 🗺️ Roadmap ideas
 
 - Ghost replay of your best run (and the world record)
 - Moving anchors and obstacles
+
+---
+
+<div align="center">
+
+☁️ &nbsp; ☁️ &nbsp; ☁️
+
+**Don't look down.** 🪝
+
+</div>
